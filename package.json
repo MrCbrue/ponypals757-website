@@ -1,0 +1,17 @@
+{
+  "name": "ponypals-party-rides",
+  "version": "1.0.0",
+  "description": "Local pony rides for birthday parties and family events",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/test-app.js"
+  },
+  "keywords": [
+    "pony-rides",
+    "birthday-party",
+    "node"
+  ],
+  "author": "PonyPals Co.",
+  "license": "ISC"
+}

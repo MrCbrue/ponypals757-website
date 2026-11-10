@@ -1,0 +1,86 @@
+{
+  "packages": [
+    {
+      "id": "starter",
+      "name": "Little Buckaroo",
+      "subtitle": "Perfect for intimate toddler birthdays and small family gatherings",
+      "price": 225,
+      "duration": "1 Hour",
+      "poniesCount": 1,
+      "recommendedKids": "Up to 10 children",
+      "popular": false,
+      "features": [
+        "1 friendly pony with certified gentle handler",
+        "Unlimited hand-led pony rides",
+        "Safety helmets provided for all riders (ages 2-10)",
+        "Grooming & petting station with brushes",
+        "Photo session time with birthday child",
+        "Full clean-up guarantee (zero lawn mess)"
+      ]
+    },
+    {
+      "id": "carousel",
+      "name": "Classic Carousel",
+      "subtitle": "Our most popular party! Double the ponies, double the smiles",
+      "price": 385,
+      "duration": "2 Hours",
+      "poniesCount": 2,
+      "recommendedKids": "Up to 20 children",
+      "popular": true,
+      "features": [
+        "2 gentle ponies with 2 experienced handlers",
+        "Simultaneous rides to keep wait lines short",
+        "Western or floral parade saddles & festive mane ribbons",
+        "Interactive pony brushing & mane braiding activity",
+        "Commemorative lucky horseshoe keepsake for the birthday child",
+        "Safety helmets in multiple sizes provided",
+        "Full clean-up guarantee"
+      ]
+    },
+    {
+      "id": "unicorn",
+      "name": "Unicorn Gala",
+      "subtitle": "The ultimate storybook fairytale experience with magical makeovers",
+      "price": 545,
+      "duration": "2.5 Hours",
+      "poniesCount": 2,
+      "recommendedKids": "Up to 30 children",
+      "popular": false,
+      "features": [
+        "2 ponies transformed with magical horns, body glitter & rainbow ribbons",
+        "Bonus mini pony 'Peaches' for unlimited petting & cuddle photos",
+        "Mini petting corral setup with shade canopy",
+        "Personalized birthday ribbon ceremony & golden horseshoe gift",
+        "Unicorn party favor stickers for all attending children",
+        "3 handlers ensuring seamless fun and total safety",
+        "Full clean-up guarantee"
+      ]
+    }
+  ],
+  "addOns": [
+    {
+      "id": "unicorn-makeover",
+      "name": "Sparkle Unicorn Makeover",
+      "description": "Glitter hooves, pastel floral garland & custom unicorn horn",
+      "price": 45
+    },
+    {
+      "id": "petting-pen",
+      "name": "Mini Petting Pen Add-on",
+      "description": "Miniature pony + 2 fluffy Angora bunnies with cozy pens",
+      "price": 85
+    },
+    {
+      "id": "cowboy-hats",
+      "name": "Cowboy / Cowgirl Felt Hats (Pack of 12)",
+      "description": "Keepsake hats for all party guests",
+      "price": 50
+    },
+    {
+      "id": "extra-half-hour",
+      "name": "Extra 30 Minutes of Riding Time",
+      "description": "Extend the smiles for bigger parties",
+      "price": 75
+    }
+  ]
+}

@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PonyPals | Pony Rides for Birthday Parties</title>
+  <meta name="description" content="Hand-led pony rides at your home or park. Four gentle ponies, helmets for every rider, and we clean up after. Serving families within 35 miles of Springfield.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Karla:wght@400;500;700&family=Young+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="top-strip">
+    Now booking spring and summer weekends. Questions? Call or text <a href="tel:5557669725">(555) 766-9725</a>
+  </div>
+
+  <header class="site-header">
+    <div class="container">
+      <a href="/" class="logo" aria-label="PonyPals home">
+        <svg class="logo-mark" width="34" height="34" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M7 5 C5 14 7 26 16 26 C25 26 27 14 25 5" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="square"/>
+          <g class="hole">
+            <circle cx="6.5" cy="8.5" r="0.95"/><circle cx="6.6" cy="15" r="0.95"/><circle cx="9.8" cy="22.6" r="0.95"/>
+            <circle cx="25.5" cy="8.5" r="0.95"/><circle cx="25.4" cy="15" r="0.95"/><circle cx="22.2" cy="22.6" r="0.95"/>
+          </g>
+        </svg>
+        <span>
+          <span class="logo-name">PonyPals</span>
+          <span class="logo-sub">Party pony rides</span>
+        </span>
+      </a>
+
+      <nav class="main-nav" aria-label="Main">
+        <ul>
+          <li><a href="#ponies">The ponies</a></li>
+          <li><a href="#prices">Prices</a></li>
+          <li><a href="#care">Safety</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+
+      <a href="#book" class="btn btn-primary btn-sm">Request a date</a>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <h1>Pony rides for birthday parties, right in your backyard.</h1>
+          <p class="hero-lede">
+            We're a small family outfit with four patient ponies and a horse trailer. We drive out, set up a riding loop, lead every ride by hand, and leave your yard the way we found it.
+          </p>
+          <div class="hero-actions">
+            <a href="#book" class="btn btn-primary">Request a party date</a>
+            <a href="#prices" class="text-link">See prices</a>
+          </div>
+          <ul class="hero-facts">
+            <li>From <strong>$225</strong></li>
+            <li>Within 35 miles of Springfield</li>
+            <li>Riders ages 2 to 10</li>
+            <li>Fully insured</li>
+          </ul>
+        </div>
+
+        <!-- Drop a real photo at public/images/hero.jpg and it replaces the color panel automatically -->
+        <div class="photo hero-photo">
+          <div class="photo-fallback" aria-hidden="true">
+            Buttercup, Starlight,<br>Barnaby &amp; Peaches
+          </div>
+          <img src="/images/hero.jpg" alt="Kids taking turns on a pony at a backyard birthday party" onerror="this.remove()">
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section section-alt">
+      <div class="container split">
+        <header>
+          <h2>How a party works</h2>
+          <p>Most families book two to four weeks ahead. Weekends in May and June go first, so earlier is better if you have a date in mind.</p>
+        </header>
+
+        <ol class="steps">
+          <li>
+            <div>
+              <h3>Send us the details</h3>
+              <p>Use the form below. Tell us the date, where the party is, and anything about the birthday kid we should know. You don't pay anything yet.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>We call you back within a day</h3>
+              <p>We'll confirm the date, ask about your yard and gate, and answer questions. A $50 deposit holds the slot and is refundable up to a week before.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>We arrive 20 minutes early</h3>
+              <p>The ponies show up groomed and saddled. One of us holds the lead on every ride, and every rider wears a helmet.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>We clean up and head home</h3>
+              <p>We put down mats where the ponies stand and take everything with us when we leave. Yes, including that.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Ponies -->
+    <section id="ponies" class="section">
+      <div class="container">
+        <div class="section-intro">
+          <h2>Meet the ponies</h2>
+          <p>All four live with us, and all four have done a lot of birthday parties. Tell us who you'd like on the form and we'll do our best to bring them.</p>
+        </div>
+
+        <div class="pony-grid">
+          <article class="pony">
+            <div class="photo" style="--coat: #c9a25e;">
+              <div class="photo-fallback dark" aria-hidden="true">Buttercup</div>
+              <img src="/images/buttercup.jpg" alt="Buttercup, a golden palomino pony" onerror="this.remove()">
+            </div>
+            <h3>Buttercup</h3>
+            <p class="pony-meta">Welsh cross &middot; 11.2 hands &middot; riders up to 65 lb</p>
+            <p>Our oldest and steadiest. Buttercup walks slowly, stands still for photos, and doesn't mind a toddler hanging on to her mane. If you're expecting a lot of first-time riders, she's the one we'd send.</p>
+            <a href="#book" class="text-link pick-pony" data-pony="Buttercup">Ask for Buttercup</a>
+          </article>
+
+          <article class="pony">
+            <div class="photo" style="--coat: #e6e0d4;">
+              <div class="photo-fallback dark" aria-hidden="true">Starlight</div>
+              <img src="/images/starlight.jpg" alt="Starlight, a white pony wearing a unicorn horn" onerror="this.remove()">
+            </div>
+            <h3>Starlight</h3>
+            <p class="pony-meta">Quarter pony &middot; 12.2 hands &middot; riders up to 90 lb</p>
+            <p>The one who wears the unicorn horn. Starlight is tall for a pony and very patient about being brushed and decorated. Older kids like her because she feels like riding a real horse.</p>
+            <a href="#book" class="text-link pick-pony" data-pony="Starlight">Ask for Starlight</a>
+          </article>
+
+          <article class="pony">
+            <div class="photo" style="--coat: #8b8f8c;">
+              <div class="photo-fallback" aria-hidden="true">Barnaby</div>
+              <img src="/images/barnaby.jpg" alt="Barnaby, a dapple grey pony in a western saddle" onerror="this.remove()">
+            </div>
+            <h3>Barnaby</h3>
+            <p class="pony-meta">Welsh Mountain pony &middot; 12 hands &middot; riders up to 80 lb</p>
+            <p>Barnaby has a nice even walk and actually seems to enjoy a crowd. He usually wears the western saddle and does well at bigger parties where the line needs to keep moving.</p>
+            <a href="#book" class="text-link pick-pony" data-pony="Barnaby">Ask for Barnaby</a>
+          </article>
+
+          <article class="pony">
+            <div class="photo" style="--coat: #94573a;">
+              <div class="photo-fallback" aria-hidden="true">Peaches</div>
+              <img src="/images/peaches.jpg" alt="Peaches, a small chestnut and white miniature horse" onerror="this.remove()">
+            </div>
+            <h3>Peaches</h3>
+            <p class="pony-meta">Miniature horse &middot; 9.2 hands &middot; petting, riders up to 45 lb</p>
+            <p>Peaches is a miniature horse, so she's mostly for petting, brushing, and the very smallest riders. She comes with the Unicorn Gala, or you can add her petting pen to any party.</p>
+            <a href="#book" class="text-link pick-pony" data-pony="Peaches">Ask for Peaches</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Prices -->
+    <section id="prices" class="section section-alt">
+      <div class="container">
+        <div class="section-intro">
+          <h2>Prices</h2>
+          <p>Travel, helmets, handlers, setup, and cleanup are included in every package. The price you see is the price you pay, plus any extras you choose.</p>
+        </div>
+
+        <table class="price-table">
+          <thead>
+            <tr>
+              <th scope="col">Package</th>
+              <th scope="col">Time</th>
+              <th scope="col">Ponies</th>
+              <th scope="col">Kids</th>
+              <th scope="col">Price</th>
+              <th scope="col"><span class="visually-hidden">Choose</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">
+                <span class="pkg-name">Little Buckaroo</span>
+                <span class="pkg-desc">One pony and one handler. Good for small parties and younger kids.</span>
+              </th>
+              <td data-label="Time">1 hour</td>
+              <td data-label="Ponies">1</td>
+              <td data-label="Kids">Up to 10</td>
+              <td data-label="Price"><span class="price">$225</span></td>
+              <td><a href="#book" class="btn btn-secondary btn-sm pick-pkg" data-pkg="starter">Choose</a></td>
+            </tr>
+            <tr>
+              <th scope="row">
+                <span class="pkg-name">Classic Carousel</span>
+                <span class="pkg-desc">Two ponies, so the line moves twice as fast. The birthday kid gets a horseshoe to keep.</span>
+                <span class="pkg-note">Our most booked party</span>
+              </th>
+              <td data-label="Time">2 hours</td>
+              <td data-label="Ponies">2</td>
+              <td data-label="Kids">Up to 20</td>
+              <td data-label="Price"><span class="price">$385</span></td>
+              <td><a href="#book" class="btn btn-primary btn-sm pick-pkg" data-pkg="carousel">Choose</a></td>
+            </tr>
+            <tr>
+              <th scope="row">
+                <span class="pkg-name">Unicorn Gala</span>
+                <span class="pkg-desc">Two ponies dressed as unicorns, plus Peaches in a shaded petting pen. Three handlers.</span>
+              </th>
+              <td data-label="Time">2&frac12; hours</td>
+              <td data-label="Ponies">2 + mini</td>
+              <td data-label="Kids">Up to 30</td>
+              <td data-label="Price"><span class="price">$545</span></td>
+              <td><a href="#book" class="btn btn-secondary btn-sm pick-pkg" data-pkg="unicorn">Choose</a></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="prices-extra">
+          <div>
+            <h3>Every party includes</h3>
+            <ul class="included-list">
+              <li>A handler leading every single ride</li>
+              <li>Helmets in kid sizes, cleaned between parties</li>
+              <li>Brushes for a grooming station</li>
+              <li>Travel anywhere within 35 miles</li>
+              <li>Setup, mats, and full cleanup</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Extras</h3>
+            <ul class="menu-list">
+              <li><span class="item">Unicorn horn, ribbons &amp; hoof glitter <small>Per pony</small></span><span class="leader"></span><span class="cost">$45</span></li>
+              <li><span class="item">Petting pen <small>Peaches plus two rabbits</small></span><span class="leader"></span><span class="cost">$85</span></li>
+              <li><span class="item">Felt cowboy hats <small>Set of 12 for the guests</small></span><span class="leader"></span><span class="cost">$50</span></li>
+              <li><span class="item">Extra 30 minutes</span><span class="leader"></span><span class="cost">$75</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Booking / party request -->
+    <section id="book" class="section booking">
+      <div class="container booking-grid">
+
+        <aside class="booking-aside">
+          <h2>Request a party date</h2>
+          <p>Fill this out and we'll get back to you within a day to confirm. Nothing is booked or charged until we've talked.</p>
+          <p>If your date is flexible, mention a backup in the notes. It makes it much easier to fit you in.</p>
+          <div class="aside-note">
+            Rather just talk to someone? Call or text us:<br>
+            <a class="aside-phone" href="tel:5557669725">(555) 766-9725</a>
+          </div>
+        </aside>
+
+        <div class="booking-card">
+          <form id="partyRequestForm" class="booking-form" novalidate>
+
+            <div id="formError" class="form-error" role="alert"></div>
+
+            <fieldset>
+              <legend>The party</legend>
+
+              <div class="field">
+                <span class="label" id="pkgLabel">Package</span>
+                <div class="choice-list" id="pkgSelectContainer" role="radiogroup" aria-labelledby="pkgLabel">
+                  <label class="choice">
+                    <input type="radio" name="packageId" value="starter">
+                    <span>
+                      <span class="choice-title">Little Buckaroo</span>
+                      <span class="choice-desc">1 pony, 1 hour, up to 10 kids</span>
+                    </span>
+                    <span class="choice-price">$225</span>
+                  </label>
+                  <label class="choice">
+                    <input type="radio" name="packageId" value="carousel" checked>
+                    <span>
+                      <span class="choice-title">Classic Carousel</span>
+                      <span class="choice-desc">2 ponies, 2 hours, up to 20 kids</span>
+                    </span>
+                    <span class="choice-price">$385</span>
+                  </label>
+                  <label class="choice">
+                    <input type="radio" name="packageId" value="unicorn">
+                    <span>
+                      <span class="choice-title">Unicorn Gala</span>
+                      <span class="choice-desc">2 unicorn ponies + petting pen, 2&frac12; hours, up to 30 kids</span>
+                    </span>
+                    <span class="choice-price">$545</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="row row-2">
+                <div class="field">
+                  <label for="eventDate">Date</label>
+                  <input type="date" id="eventDate" name="eventDate" class="input" required>
+                </div>
+                <div class="field">
+                  <label for="eventTime">Time</label>
+                  <select id="eventTime" name="eventTime" class="input">
+                    <option>Morning (10am to noon)</option>
+                    <option selected>Early afternoon (1 to 3pm)</option>
+                    <option>Late afternoon (3:30 to 5:30pm)</option>
+                    <option>Evening (5:30 to 7:30pm)</option>
+                    <option>Something else (I'll explain in the notes)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="row row-2">
+                <div class="field">
+                  <label for="locationAddress">Address or park name</label>
+                  <input type="text" id="locationAddress" name="locationAddress" class="input" autocomplete="street-address" placeholder="742 Evergreen Terrace, Springfield" required>
+                </div>
+                <div class="field">
+                  <label for="surfaceType">Where will the ponies walk?</label>
+                  <select id="surfaceType" name="surfaceType" class="input">
+                    <option>Backyard grass</option>
+                    <option>Driveway or cul-de-sac</option>
+                    <option>Public park</option>
+                    <option>HOA common area</option>
+                    <option>Barn or indoor arena</option>
+                    <option>Not sure yet</option>
+                  </select>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>The birthday kid</legend>
+
+              <div class="row row-3">
+                <div class="field">
+                  <label for="childName">Name <span class="optional">(optional)</span></label>
+                  <input type="text" id="childName" name="childName" class="input">
+                </div>
+                <div class="field">
+                  <label for="childAge">Turning <span class="optional">(optional)</span></label>
+                  <input type="number" id="childAge" name="childAge" min="1" max="14" class="input">
+                </div>
+                <div class="field">
+                  <label for="estimatedKids">Kids who'll ride</label>
+                  <input type="number" id="estimatedKids" name="estimatedKids" min="1" max="60" value="12" class="input">
+                </div>
+              </div>
+
+              <div class="field" style="margin-top: 20px;">
+                <span class="label">Any pony requests? <span class="optional">(optional)</span></span>
+                <div class="check-grid">
+                  <label class="check"><input type="checkbox" name="selectedPonies" value="Buttercup"> Buttercup <small>gentlest</small></label>
+                  <label class="check"><input type="checkbox" name="selectedPonies" value="Starlight"> Starlight <small>unicorn</small></label>
+                  <label class="check"><input type="checkbox" name="selectedPonies" value="Barnaby"> Barnaby <small>western</small></label>
+                  <label class="check"><input type="checkbox" name="selectedPonies" value="Peaches"> Peaches <small>mini, petting</small></label>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Extras</legend>
+              <div class="check-grid">
+                <label class="check"><input type="checkbox" name="addOns" value="unicorn-makeover"> Unicorn horn &amp; ribbons <small>+$45</small></label>
+                <label class="check"><input type="checkbox" name="addOns" value="petting-pen"> Petting pen <small>+$85</small></label>
+                <label class="check"><input type="checkbox" name="addOns" value="cowboy-hats"> 12 cowboy hats <small>+$50</small></label>
+                <label class="check"><input type="checkbox" name="addOns" value="extra-half-hour"> Extra 30 minutes <small>+$75</small></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend><label for="specialRequests">Tell us about your party</label></legend>
+              <p class="field-help">Theme, gate width, nervous riders, a backup date, anything at all. This goes straight to us.</p>
+              <textarea id="specialRequests" name="specialRequests" class="input request-box" rows="6"
+                placeholder="Mia's turning 5 and is obsessed with unicorns. Our side gate is about 4 feet wide. A couple of her cousins are nervous around animals."></textarea>
+            </fieldset>
+
+            <fieldset>
+              <legend>How do we reach you?</legend>
+              <div class="row row-3">
+                <div class="field">
+                  <label for="parentName">Your name</label>
+                  <input type="text" id="parentName" name="parentName" class="input" autocomplete="name" required>
+                </div>
+                <div class="field">
+                  <label for="email">Email</label>
+                  <input type="email" id="email" name="email" class="input" autocomplete="email" required>
+                </div>
+                <div class="field">
+                  <label for="phone">Phone</label>
+                  <input type="tel" id="phone" name="phone" class="input" autocomplete="tel" required>
+                </div>
+              </div>
+            </fieldset>
+
+            <div class="form-footer">
+              <div>
+                <div class="total-label">Estimated total</div>
+                <div class="total-amount" id="summaryPriceDisplay">$385</div>
+                <div class="total-detail" id="summaryDetailsDisplay">Classic Carousel</div>
+              </div>
+              <div class="submit-col">
+                <button type="submit" id="submitBtn" class="btn btn-primary">Send request</button>
+                <p class="submit-note">No payment needed now.</p>
+              </div>
+            </div>
+          </form>
+
+          <div id="bookingSuccessCard" class="confirmation" tabindex="-1">
+            <h3>Thanks, <span id="successParentName"></span>. We got it.</h3>
+            <p>We'll call or text you at <strong id="successPhone"></strong> within a day to confirm the date.</p>
+            <div class="ref">Reference <span id="successRefCode"></span></div>
+
+            <dl class="recap">
+              <dt>Package</dt><dd id="recapPackage"></dd>
+              <dt>When</dt><dd id="recapDateTime"></dd>
+              <dt>Where</dt><dd id="recapLocation"></dd>
+              <dt class="recap-notes-row">Your notes</dt><dd class="recap-notes-row notes" id="recapSpecialRequests"></dd>
+              <dt>Estimate</dt><dd id="recapTotal"></dd>
+            </dl>
+
+            <div class="hero-actions" style="margin-bottom: 0;">
+              <button type="button" id="submitAnotherBtn" class="btn btn-secondary">Send another request</button>
+              <a href="#" class="text-link" onclick="window.print(); return false;">Print this</a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Care & safety -->
+    <section id="care" class="section section-alt">
+      <div class="container">
+        <div class="section-intro">
+          <h2>How we look after kids and ponies</h2>
+        </div>
+        <div class="care-cols">
+          <div>
+            <h3>The riders</h3>
+            <p>Every ride is led on foot by one of us, with a hand on the lead the whole time. Kids wear a fitted helmet, and we help each one on and off.</p>
+            <p>We match riders to ponies by size, so a nine-year-old won't end up on Peaches. If a child is nervous, they can brush and pet first. Nobody gets put on a pony who doesn't want to be.</p>
+          </div>
+          <div>
+            <h3>The ponies</h3>
+            <p>They live on pasture at our place and see the vet and farrier on a regular schedule. At parties they get water, shade, and breaks between rides.</p>
+            <p>If it's too hot or a pony seems tired, we stop. And if a storm is coming, we'll move your party to another date at no charge.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reviews -->
+    <!-- PLACEHOLDER REVIEWS: replace with real quotes from your customers (with their permission) before going live. -->
+    <section class="section">
+      <div class="container">
+        <div class="section-intro">
+          <h2>From parents</h2>
+        </div>
+        <div class="reviews">
+          <figure class="quote big">
+            <blockquote>
+              <p>"My daughter talked about Starlight for a month before her party, and she still asks when the unicorn is coming back. They were so calm with the little ones."</p>
+            </blockquote>
+            <figcaption><strong>Rachel T.</strong>, 6th birthday, Riverside</figcaption>
+          </figure>
+          <div class="reviews-side">
+            <figure class="quote">
+              <blockquote>
+                <p>"Two of the kids were really scared at first. They let them just brush Buttercup until they were ready, and by the end they didn't want to get off."</p>
+              </blockquote>
+              <figcaption><strong>Emily M.</strong>, 4th birthday, Oakwood</figcaption>
+            </figure>
+            <figure class="quote">
+              <blockquote>
+                <p>"Showed up early, parked on the street, and you honestly couldn't tell there had been ponies in the yard afterwards."</p>
+              </blockquote>
+              <figcaption><strong>Brian D.</strong>, 5th birthday, Meadowbrook</figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="section section-alt">
+      <div class="container split">
+        <header>
+          <h2>Questions people ask</h2>
+          <p>Don't see yours? Text us at <a href="tel:5557669725">(555) 766-9725</a>.</p>
+        </header>
+
+        <div class="faq-list">
+          <details>
+            <summary>How much space do we need?</summary>
+            <p>Less than you'd think. A patch of grass about 30 by 40 feet is plenty for a riding loop, and a driveway or quiet cul-de-sac works too. If you're using a public park, check whether they need a permit for animals.</p>
+          </details>
+          <details>
+            <summary>Are there age or weight limits?</summary>
+            <p>Our ponies are best for kids about 2 to 10. Weight limits run from 45 lb on Peaches to 90 lb on Starlight. We'll match each rider to a pony that fits.</p>
+          </details>
+          <details>
+            <summary>What happens if it rains?</summary>
+            <p>A light drizzle is fine. For storms, lightning, or serious heat, we'll move you to another date for free. Some families just move the loop into a garage or carport.</p>
+          </details>
+          <details>
+            <summary>Where does the trailer park?</summary>
+            <p>We tow a two-horse trailer behind a pickup and need roughly two and a half car lengths of street or driveway. We get there 15 to 20 minutes early so riding starts on time.</p>
+          </details>
+          <details>
+            <summary>How does payment work?</summary>
+            <p>Nothing is due when you send the form. Once we've confirmed your date, a $50 deposit holds it. The rest is due on the day by cash, check, card, Venmo, or Zelle.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <a href="/" class="logo">
+            <svg class="logo-mark" width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+              <path d="M7 5 C5 14 7 26 16 26 C25 26 27 14 25 5" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="square"/>
+              <g class="hole">
+                <circle cx="6.5" cy="8.5" r="0.95"/><circle cx="6.6" cy="15" r="0.95"/><circle cx="9.8" cy="22.6" r="0.95"/>
+                <circle cx="25.5" cy="8.5" r="0.95"/><circle cx="25.4" cy="15" r="0.95"/><circle cx="22.2" cy="22.6" r="0.95"/>
+              </g>
+            </svg>
+            <span>
+              <span class="logo-name">PonyPals</span>
+              <span class="logo-sub">Party pony rides</span>
+            </span>
+          </a>
+          <p>Hand-led pony rides for birthday parties and small events around Springfield.</p>
+        </div>
+
+        <div>
+          <h4>Get in touch</h4>
+          <ul class="footer-links">
+            <li><a href="tel:5557669725">(555) 766-9725</a></li>
+            <li><a href="mailto:hello@ponypalsparties.com">hello@ponypalsparties.com</a></li>
+            <li><a href="#book">Request a date</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4>Where we go</h4>
+          <p>Springfield, Oakwood, Meadowbrook, Pleasantville, Riverside, and anywhere else within about 35 miles.</p>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <span>&copy; 2026 PonyPals Party Rides</span>
+        <a href="/admin">Owner login</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Party Requests | PonyPals Owner Portal</title>
+  <meta name="robots" content="noindex">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Karla:wght@400;500;700&family=Young+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { font-size: 15px; }
+
+    .admin-header {
+      background: var(--ink);
+      color: #f1ead9;
+    }
+    .admin-header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+    }
+    .admin-header .logo { color: #f1ead9; }
+    .admin-header .logo-mark { color: var(--hay); }
+    .admin-header .logo-mark .hole { fill: var(--ink); }
+    .admin-header .logo-name { font-size: 1.25rem; }
+    .admin-header a.back { color: #cfc6b8; font-size: 0.9rem; }
+
+    .admin-title {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+      padding: 36px 0 20px;
+    }
+    .admin-title h1 { font-size: 2rem; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--card);
+      margin-bottom: 28px;
+    }
+    .stat { padding: 18px 22px; }
+    .stat + .stat { border-left: 1px solid var(--line); }
+    .stat-num { font-family: var(--serif); font-size: 1.9rem; line-height: 1.1; }
+    .stat-label { font-size: 0.85rem; color: var(--ink-faint); }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .tabs { display: flex; gap: 4px; }
+    .filter-btn {
+      font: inherit;
+      font-weight: 700;
+      font-size: 0.9rem;
+      padding: 7px 14px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      background: none;
+      color: var(--ink-soft);
+      cursor: pointer;
+    }
+    .filter-btn:hover { color: var(--ink); }
+    .filter-btn.active { background: var(--card); border-color: var(--line); color: var(--ink); }
+    .filter-btn .count { color: var(--ink-faint); font-weight: 400; }
+
+    .table-wrap {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      overflow-x: auto;
+      margin-bottom: 48px;
+    }
+
+    .requests-table { width: 100%; border-collapse: collapse; min-width: 960px; }
+    .requests-table th {
+      text-align: left;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--ink-faint);
+      background: var(--paper);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .requests-table td {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .requests-table tbody tr:last-child td { border-bottom: none; }
+
+    .muted { color: var(--ink-faint); font-size: 0.85rem; }
+    .strong { font-weight: 700; }
+    .ref-id { font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }
+
+    .notes {
+      margin-top: 8px;
+      padding: 8px 12px;
+      background: var(--paper);
+      border-left: 3px solid var(--hay);
+      font-size: 0.9rem;
+      white-space: pre-line;
+      max-width: 380px;
+    }
+
+    .status {
+      display: inline-block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+    }
+    .status-pending { color: #946512; }
+    .status-confirmed { color: var(--pasture); }
+    .status-completed { color: var(--ink-faint); }
+    .status-cancelled { color: var(--barn); }
+
+    .status-select {
+      font: inherit;
+      font-size: 0.88rem;
+      padding: 6px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: #fff;
+      margin-top: 8px;
+      display: block;
+    }
+
+    .delete-btn {
+      font: inherit;
+      font-size: 0.85rem;
+      background: none;
+      border: none;
+      color: var(--barn);
+      text-decoration: underline;
+      cursor: pointer;
+      margin-top: 8px;
+      padding: 0;
+    }
+
+    .empty-state { text-align: center; padding: 56px 20px; color: var(--ink-faint); }
+
+    @media (max-width: 700px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stat:nth-child(3) { border-left: none; }
+      .stat:nth-child(n+3) { border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="admin-header">
+    <div class="container">
+      <a href="/admin" class="logo">
+        <svg class="logo-mark" width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M7 5 C5 14 7 26 16 26 C25 26 27 14 25 5" fill="none" stroke="currentColor" stroke-width="4.2" stroke-linecap="square"/>
+          <g class="hole">
+            <circle cx="6.5" cy="8.5" r="0.95"/><circle cx="6.6" cy="15" r="0.95"/><circle cx="9.8" cy="22.6" r="0.95"/>
+            <circle cx="25.5" cy="8.5" r="0.95"/><circle cx="25.4" cy="15" r="0.95"/><circle cx="22.2" cy="22.6" r="0.95"/>
+          </g>
+        </svg>
+        <span class="logo-name">PonyPals</span>
+      </a>
+      <a href="/" class="back">View website</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="admin-title">
+      <div>
+        <h1>Party requests</h1>
+        <p class="muted">Everything sent through the request form on the website.</p>
+      </div>
+      <button id="refreshBtn" class="btn btn-secondary btn-sm">Refresh</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-num" id="statTotal">0</div><div class="stat-label">Total requests</div></div>
+      <div class="stat"><div class="stat-num" id="statPending">0</div><div class="stat-label">Waiting on a call back</div></div>
+      <div class="stat"><div class="stat-num" id="statConfirmed">0</div><div class="stat-label">Confirmed</div></div>
+      <div class="stat"><div class="stat-num" id="statRevenue">$0</div><div class="stat-label">Confirmed revenue</div></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="tabs" role="tablist">
+        <button class="filter-btn active" data-filter="all">All <span class="count" id="countAll">0</span></button>
+        <button class="filter-btn" data-filter="Pending">Pending <span class="count" id="countPending">0</span></button>
+        <button class="filter-btn" data-filter="Confirmed">Confirmed <span class="count" id="countConfirmed">0</span></button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="requests-table">
+        <thead>
+          <tr>
+            <th>Request</th>
+            <th>Contact</th>
+            <th>Package</th>
+            <th>Party details</th>
+            <th>Estimate</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="requestsTbody">
+          <tr><td colspan="6" class="empty-state">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>
