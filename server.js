@@ -3,43 +3,114 @@ const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const os = require('node:os');
+
+// Detect serverless environment (Vercel / AWS Lambda)
+const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NOW_REGION);
+
+// Statically require data files so Vercel's bundler guarantees their inclusion
+const defaultPonies = require('./data/ponies.json');
+const defaultPackages = require('./data/packages.json');
+let defaultRequests = [];
+try {
+  defaultRequests = require('./data/requests.json');
+} catch (_) {
+  defaultRequests = [];
+}
 
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
-// REQUESTS_FILE can be overridden (the test suite points it at a temp file)
-const REQUESTS_FILE = process.env.PONYPALS_REQUESTS_FILE || path.join(DATA_DIR, 'requests.json');
+const SEED_REQUESTS_FILE = path.join(DATA_DIR, 'requests.json');
 const PONIES_FILE = path.join(DATA_DIR, 'ponies.json');
 const PACKAGES_FILE = path.join(DATA_DIR, 'packages.json');
 
-// Ensure data directory exists
-if (!fsSync.existsSync(DATA_DIR)) {
-  fsSync.mkdirSync(DATA_DIR, { recursive: true });
-}
+// On Vercel the root directory is read-only. Writable storage lives in os.tmpdir().
+const REQUESTS_FILE = process.env.PONYPALS_REQUESTS_FILE || (
+  isServerless
+    ? path.join(os.tmpdir(), 'ponypals-requests.json')
+    : path.join(DATA_DIR, 'requests.json')
+);
 
-// Ensure requests.json exists
-if (!fsSync.existsSync(REQUESTS_FILE)) {
-  fsSync.writeFileSync(REQUESTS_FILE, JSON.stringify([], null, 2), 'utf-8');
-}
+// Safely ensure data directory exists in non-serverless mode
+try {
+  if (!isServerless && !fsSync.existsSync(DATA_DIR)) {
+    fsSync.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (_) {}
+
+// Safely ensure requests file exists
+try {
+  if (!fsSync.existsSync(REQUESTS_FILE)) {
+    if (fsSync.existsSync(SEED_REQUESTS_FILE)) {
+      fsSync.copyFileSync(SEED_REQUESTS_FILE, REQUESTS_FILE);
+    } else {
+      fsSync.writeFileSync(REQUESTS_FILE, JSON.stringify(defaultRequests, null, 2), 'utf-8');
+    }
+  }
+} catch (_) {}
+
+// In-memory cache for fast access and fallback if filesystem is locked/read-only
+let inMemoryRequests = Array.isArray(defaultRequests) ? [...defaultRequests] : [];
 
 // Helpers
 async function readJson(filePath, fallback = []) {
+  if (filePath === REQUESTS_FILE && inMemoryRequests && inMemoryRequests.length > 0) {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content);
+      inMemoryRequests = parsed;
+      return parsed;
+    } catch (_) {
+      return inMemoryRequests;
+    }
+  }
+
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    if (filePath === REQUESTS_FILE) inMemoryRequests = parsed;
+    return parsed;
   } catch (err) {
-    console.error(`Error reading ${filePath}:`, err.message);
+    if (filePath === PONIES_FILE) return defaultPonies;
+    if (filePath === PACKAGES_FILE) return defaultPackages;
+    if (filePath === REQUESTS_FILE) return inMemoryRequests || defaultRequests || fallback;
     return fallback;
   }
 }
 
 async function writeJson(filePath, data) {
-  const tempPath = `${filePath}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8');
-  await fs.rename(tempPath, filePath);
+  if (filePath === REQUESTS_FILE) {
+    inMemoryRequests = data;
+  }
+  try {
+    const dir = path.dirname(filePath);
+    if (!fsSync.existsSync(dir)) {
+      fsSync.mkdirSync(dir, { recursive: true });
+    }
+    const tempPath = `${filePath}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+    await fs.rename(tempPath, filePath);
+  } catch (err) {
+    console.warn(`[PonyPals] Storage note: disk write (${err.message}), using memory cache.`);
+  }
 }
 
 function parseJsonBody(req) {
+  // If Vercel or another environment has already parsed req.body
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'object') {
+      return Promise.resolve(req.body);
+    }
+    if (typeof req.body === 'string') {
+      try {
+        return Promise.resolve(JSON.parse(req.body));
+      } catch (e) {
+        return Promise.reject(new Error('Invalid JSON format'));
+      }
+    }
+  }
+
   return new Promise((resolve, reject) => {
     let body = '';
     req.on('data', chunk => {
@@ -125,7 +196,18 @@ function sendJson(res, statusCode, data) {
 
 async function handleRequest(req, res) {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const pathname = parsedUrl.pathname;
+  let pathname = parsedUrl.pathname;
+
+  // Handle rewrite from /api/:path* -> /api/index.js or /api/
+  if (pathname === '/api/index.js' || pathname === '/api') {
+    if (req.headers['x-matched-path']) {
+      pathname = req.headers['x-matched-path'];
+    } else if (parsedUrl.searchParams.has('path')) {
+      const p = parsedUrl.searchParams.get('path');
+      pathname = p.startsWith('/') ? `/api${p}` : `/api/${p}`;
+    }
+  }
+
   const method = req.method.toUpperCase();
 
   // Handle CORS preflight
@@ -330,4 +412,11 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, handleRequest, readJson, writeJson };
+// Export function as primary export for Vercel Serverless Function compatibility,
+// while attaching properties so destructuring like { handleRequest, server } works.
+handleRequest.server = server;
+handleRequest.handleRequest = handleRequest;
+handleRequest.readJson = readJson;
+handleRequest.writeJson = writeJson;
+
+module.exports = handleRequest;
