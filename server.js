@@ -5,6 +5,30 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 
+// Lightweight .env loader (does not override already-set environment variables)
+function loadDotEnv() {
+  try {
+    const envPath = path.join(__dirname, '.env');
+    if (!fsSync.existsSync(envPath)) return;
+    const lines = fsSync.readFileSync(envPath, 'utf-8').split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx <= 0) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      let val = trimmed.slice(eqIdx + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[key] === undefined) {
+        process.env[key] = val;
+      }
+    }
+  } catch (_) {}
+}
+loadDotEnv();
+
 // Detect serverless environment (Vercel / AWS Lambda)
 const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NOW_REGION);
 
@@ -18,12 +42,20 @@ try {
   defaultRequests = [];
 }
 
+const HOST = process.env.HOST || '127.0.0.1';
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SEED_REQUESTS_FILE = path.join(DATA_DIR, 'requests.json');
 const PONIES_FILE = path.join(DATA_DIR, 'ponies.json');
 const PACKAGES_FILE = path.join(DATA_DIR, 'packages.json');
+
+const SESSION_COOKIE_NAME = 'ponypals_admin_session';
+const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
+const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const LOGIN_MAX_FAILURES = 10;
+const ALLOWED_STATUSES = new Set(['Pending', 'Confirmed', 'Completed', 'Cancelled']);
+const loginAttempts = new Map();
 
 // On Vercel the root directory is read-only. Writable storage lives in os.tmpdir().
 const REQUESTS_FILE = process.env.PONYPALS_REQUESTS_FILE || (
@@ -52,6 +84,279 @@ try {
 
 // In-memory cache for fast access and fallback if filesystem is locked/read-only
 let inMemoryRequests = Array.isArray(defaultRequests) ? [...defaultRequests] : [];
+
+// Auth & security helpers
+function getAdminConfig() {
+  return {
+    username: process.env.ADMIN_USER || 'admin',
+    password: process.env.ADMIN_PASSWORD || '',
+    sessionSecret: process.env.ADMIN_SESSION_SECRET || ''
+  };
+}
+
+function sha256(str) {
+  return crypto.createHash('sha256').update(String(str)).digest();
+}
+
+function safeEqual(a, b) {
+  return crypto.timingSafeEqual(sha256(a), sha256(b));
+}
+
+function getSessionKey(config) {
+  if (config.sessionSecret) {
+    return sha256(config.sessionSecret);
+  }
+  return crypto.createHmac('sha256', 'ponypals-admin-session-v1').update(config.password).digest();
+}
+
+function signSessionToken(username, config) {
+  const payload = Buffer.from(JSON.stringify({
+    u: username,
+    exp: Date.now() + SESSION_TTL_SECONDS * 1000
+  }), 'utf-8').toString('base64url');
+  const sig = crypto.createHmac('sha256', getSessionKey(config)).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie;
+  const cookies = {};
+  if (!header) return cookies;
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx <= 0) continue;
+    const name = part.slice(0, idx).trim();
+    const val = part.slice(idx + 1).trim();
+    try {
+      cookies[name] = decodeURIComponent(val);
+    } catch (_) {
+      cookies[name] = val;
+    }
+  }
+  return cookies;
+}
+
+function verifySessionToken(token, config) {
+  if (!token || !config.password) return false;
+  const parts = String(token).split('.');
+  if (parts.length !== 2) return false;
+  const [payloadB64, sigB64] = parts;
+  if (!payloadB64 || !sigB64) return false;
+
+  const expectedSig = crypto.createHmac('sha256', getSessionKey(config)).update(payloadB64).digest();
+  let actualSig;
+  try {
+    actualSig = Buffer.from(sigB64, 'base64url');
+  } catch (_) {
+    return false;
+  }
+  if (actualSig.length !== expectedSig.length || !crypto.timingSafeEqual(actualSig, expectedSig)) {
+    return false;
+  }
+
+  try {
+    const data = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'));
+    if (!data || typeof data.exp !== 'number' || data.exp <= Date.now()) return false;
+    return safeEqual(data.u || '', config.username);
+  } catch (_) {
+    return false;
+  }
+}
+
+function verifyBasicAuth(req, config) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Basic ') || !config.password) return false;
+  let decoded = '';
+  try {
+    decoded = Buffer.from(authHeader.slice(6).trim(), 'base64').toString('utf-8');
+  } catch (_) {
+    return false;
+  }
+  const sep = decoded.indexOf(':');
+  if (sep === -1) return false;
+  const user = decoded.slice(0, sep);
+  const pass = decoded.slice(sep + 1);
+  return safeEqual(user, config.username) && safeEqual(pass, config.password);
+}
+
+function isAdminAuthenticated(req, config) {
+  if (!config.password) return false;
+  const cookies = parseCookies(req);
+  if (verifySessionToken(cookies[SESSION_COOKIE_NAME], config)) return true;
+  if (verifyBasicAuth(req, config)) return true;
+  return false;
+}
+
+function isHttpsRequest(req) {
+  if (req.socket && req.socket.encrypted) return true;
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  return proto === 'https';
+}
+
+function buildSessionCookie(value, maxAgeSeconds, secure) {
+  const parts = [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(value)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Strict',
+    `Max-Age=${maxAgeSeconds}`
+  ];
+  if (secure) parts.push('Secure');
+  return parts.join('; ');
+}
+
+function getClientIp(req) {
+  const remote = (req.socket && req.socket.remoteAddress) || 'unknown';
+  const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+  if (isLoopback && req.headers['x-forwarded-for']) {
+    return String(req.headers['x-forwarded-for']).split(',')[0].trim();
+  }
+  return remote;
+}
+
+function isRateLimited(ip) {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry) return false;
+  if (now - entry.windowStart > LOGIN_WINDOW_MS) {
+    loginAttempts.delete(ip);
+    return false;
+  }
+  return entry.failures >= LOGIN_MAX_FAILURES;
+}
+
+function recordLoginFailure(ip) {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now - entry.windowStart > LOGIN_WINDOW_MS) {
+    loginAttempts.set(ip, { failures: 1, windowStart: now });
+  } else {
+    entry.failures += 1;
+  }
+}
+
+function clearLoginFailures(ip) {
+  loginAttempts.delete(ip);
+}
+
+function securityHeaders(extra = {}) {
+  return {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    ...extra
+  };
+}
+
+function sendHtml(res, statusCode, html, extraHeaders = {}) {
+  const buf = Buffer.from(html, 'utf-8');
+  res.writeHead(statusCode, securityHeaders({
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Length': buf.length,
+    'Cache-Control': 'no-store',
+    ...extraHeaders
+  }));
+  res.end(buf);
+}
+
+function renderAdminLoginPage() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Owner Sign In | PonyPals</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Karla:wght@400;500;700&family=Young+Serif&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .login-card { width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 36px 32px; box-shadow: var(--shadow-md); }
+    .login-card h1 { font-size: 1.8rem; margin-bottom: 6px; }
+    .login-card p { font-size: 0.95rem; margin-bottom: 24px; }
+    .login-back { display: inline-block; margin-top: 18px; font-size: 0.9rem; color: var(--ink-faint); }
+  </style>
+</head>
+<body>
+  <main class="login-wrap">
+    <div class="login-card">
+      <h1>Owner portal</h1>
+      <p>Sign in to view and manage party requests.</p>
+      <div id="loginError" class="form-error" role="alert"></div>
+      <form id="adminLoginForm" method="POST" action="/api/admin/login">
+        <div class="field">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" class="input" autocomplete="username" required autofocus>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" class="input" autocomplete="current-password" required>
+        </div>
+        <button type="submit" id="loginBtn" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Sign in</button>
+      </form>
+      <a href="/" class="login-back">Back to website</a>
+    </div>
+  </main>
+  <script>
+    const form = document.getElementById('adminLoginForm');
+    const errorEl = document.getElementById('loginError');
+    const btn = document.getElementById('loginBtn');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.classList.remove('visible');
+      errorEl.textContent = '';
+      btn.disabled = true;
+      btn.textContent = 'Signing in...';
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: form.username.value,
+            password: form.password.value
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          window.location.href = '/admin';
+          return;
+        }
+        errorEl.textContent = data.message || 'Invalid username or password.';
+        errorEl.classList.add('visible');
+      } catch (_) {
+        errorEl.textContent = 'Could not reach the server. Please try again.';
+        errorEl.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function renderAdminUnconfiguredPage() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Owner Portal Locked | PonyPals</title>
+  <meta name="robots" content="noindex">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="container" style="max-width: 560px; padding: 80px 24px;">
+    <h1 style="font-size: 1.9rem; margin-bottom: 12px;">Owner portal is locked</h1>
+    <p>Set the <code>ADMIN_PASSWORD</code> environment variable (or add it to <code>.env</code>) and restart the server to enable sign-in.</p>
+    <p style="margin-top: 18px;"><a href="/" class="text-link">Back to website</a></p>
+  </main>
+</body>
+</html>`;
+}
 
 // Helpers
 async function readJson(filePath, fallback = []) {
@@ -147,18 +452,18 @@ const MIME_TYPES = {
   '.woff2': 'font/woff2'
 };
 
-async function serveStatic(res, filePath) {
+async function serveStatic(res, filePath, options = {}) {
   try {
     // Resolve absolute path and prevent directory traversal
     const safePath = path.resolve(filePath);
-    if (!safePath.startsWith(PUBLIC_DIR)) {
-      res.writeHead(403, { 'Content-Type': 'text/plain' });
+    if (safePath !== PUBLIC_DIR && !safePath.startsWith(PUBLIC_DIR + path.sep)) {
+      res.writeHead(403, securityHeaders({ 'Content-Type': 'text/plain' }));
       return res.end('Access forbidden');
     }
 
     const stats = await fs.stat(safePath);
     if (!stats.isFile()) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.writeHead(404, securityHeaders({ 'Content-Type': 'text/plain' }));
       return res.end('File not found');
     }
 
@@ -166,32 +471,56 @@ async function serveStatic(res, filePath) {
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
     const content = await fs.readFile(safePath);
-    res.writeHead(200, {
+    res.writeHead(200, securityHeaders({
       'Content-Type': contentType,
       'Content-Length': content.length,
-      'Cache-Control': 'no-cache'
-    });
+      'Cache-Control': options.noStore ? 'no-store' : 'no-cache'
+    }));
     res.end(content);
   } catch (err) {
     if (err.code === 'ENOENT') {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.writeHead(404, securityHeaders({ 'Content-Type': 'text/plain' }));
       res.end('File not found');
     } else {
-      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.writeHead(500, securityHeaders({ 'Content-Type': 'text/plain' }));
       res.end('Internal server error');
     }
   }
 }
 
-function sendJson(res, statusCode, data) {
+function sendJson(res, statusCode, data, options = {}) {
   const jsonStr = JSON.stringify(data);
-  res.writeHead(statusCode, {
+  const headers = securityHeaders({
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
+    ...(options.noStore ? { 'Cache-Control': 'no-store' } : {}),
+    ...(options.cors !== false ? {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    } : {}),
+    ...(options.extraHeaders || {})
   });
+  res.writeHead(statusCode, headers);
   res.end(jsonStr);
+}
+
+function requireAdminApiAuth(req, res) {
+  const config = getAdminConfig();
+  if (!config.password) {
+    sendJson(res, 503, {
+      success: false,
+      message: 'Admin portal is locked: ADMIN_PASSWORD is not configured.'
+    }, { cors: false, noStore: true });
+    return false;
+  }
+  if (!isAdminAuthenticated(req, config)) {
+    sendJson(res, 401, {
+      success: false,
+      message: 'Authentication required'
+    }, { cors: false, noStore: true });
+    return false;
+  }
+  return true;
 }
 
 async function handleRequest(req, res) {
@@ -210,19 +539,69 @@ async function handleRequest(req, res) {
 
   const method = req.method.toUpperCase();
 
-  // Handle CORS preflight
+  // Handle CORS preflight for public API routes
   if (method === 'OPTIONS') {
-    res.writeHead(204, {
+    res.writeHead(204, securityHeaders({
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type'
-    });
+    }));
     return res.end();
   }
 
   // --- REST API ROUTES ---
   if (pathname.startsWith('/api/')) {
     try {
+      // POST /api/admin/login
+      if (pathname === '/api/admin/login' && method === 'POST') {
+        const config = getAdminConfig();
+        if (!config.password) {
+          return sendJson(res, 503, {
+            success: false,
+            message: 'Admin portal is locked: ADMIN_PASSWORD is not configured.'
+          }, { cors: false, noStore: true });
+        }
+
+        const ip = getClientIp(req);
+        if (isRateLimited(ip)) {
+          return sendJson(res, 429, {
+            success: false,
+            message: 'Too many failed sign-in attempts. Please wait 15 minutes and try again.'
+          }, { cors: false, noStore: true });
+        }
+
+        const body = await parseJsonBody(req);
+        const username = typeof body.username === 'string' ? body.username.trim() : '';
+        const password = typeof body.password === 'string' ? body.password : '';
+
+        if (!safeEqual(username, config.username) || !safeEqual(password, config.password)) {
+          recordLoginFailure(ip);
+          return sendJson(res, 401, {
+            success: false,
+            message: 'Invalid username or password.'
+          }, { cors: false, noStore: true });
+        }
+
+        clearLoginFailures(ip);
+        const token = signSessionToken(config.username, config);
+        const cookie = buildSessionCookie(token, SESSION_TTL_SECONDS, isHttpsRequest(req));
+        return sendJson(res, 200, { success: true }, {
+          cors: false,
+          noStore: true,
+          extraHeaders: { 'Set-Cookie': cookie }
+        });
+      }
+
+      // POST /api/admin/logout
+      if (pathname === '/api/admin/logout' && method === 'POST') {
+        const cookie = buildSessionCookie('', 0, isHttpsRequest(req));
+        return sendJson(res, 200, { success: true }, {
+          cors: false,
+          noStore: true,
+          extraHeaders: { 'Set-Cookie': cookie }
+        });
+      }
+
       // GET /api/ponies
       if (pathname === '/api/ponies' && method === 'GET') {
         const ponies = await readJson(PONIES_FILE, []);
@@ -235,8 +614,9 @@ async function handleRequest(req, res) {
         return sendJson(res, 200, { success: true, ...pkgData });
       }
 
-      // GET /api/stats
+      // GET /api/stats (Admin protected)
       if (pathname === '/api/stats' && method === 'GET') {
+        if (!requireAdminApiAuth(req, res)) return;
         const requests = await readJson(REQUESTS_FILE, []);
         const total = requests.length;
         const pending = requests.filter(r => r.status === 'Pending').length;
@@ -244,15 +624,16 @@ async function handleRequest(req, res) {
         const revenue = requests
           .filter(r => r.status === 'Confirmed')
           .reduce((sum, r) => sum + (Number(r.estimatedTotal) || 0), 0);
-        return sendJson(res, 200, { success: true, total, pending, confirmed, revenue });
+        return sendJson(res, 200, { success: true, total, pending, confirmed, revenue }, { cors: false, noStore: true });
       }
 
-      // GET /api/requests
+      // GET /api/requests (Admin protected)
       if (pathname === '/api/requests' && method === 'GET') {
+        if (!requireAdminApiAuth(req, res)) return;
         const requests = await readJson(REQUESTS_FILE, []);
         // Return latest first
         requests.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        return sendJson(res, 200, { success: true, requests });
+        return sendJson(res, 200, { success: true, requests }, { cors: false, noStore: true });
       }
 
       // POST /api/requests (User booking request)
@@ -342,15 +723,20 @@ async function handleRequest(req, res) {
         });
       }
 
-      // PATCH /api/requests/:id
+      // PATCH /api/requests/:id (Admin protected)
       if (pathname.startsWith('/api/requests/') && method === 'PATCH') {
-        const id = pathname.replace('/api/requests/', '');
+        if (!requireAdminApiAuth(req, res)) return;
+        const id = decodeURIComponent(pathname.slice('/api/requests/'.length));
         const body = await parseJsonBody(req);
+        if (body.status !== undefined && !ALLOWED_STATUSES.has(body.status)) {
+          return sendJson(res, 400, { success: false, message: 'Invalid status value' }, { cors: false, noStore: true });
+        }
+
         const currentRequests = await readJson(REQUESTS_FILE, []);
         const index = currentRequests.findIndex(r => r.id === id);
 
         if (index === -1) {
-          return sendJson(res, 404, { success: false, message: 'Request not found' });
+          return sendJson(res, 404, { success: false, message: 'Request not found' }, { cors: false, noStore: true });
         }
 
         // Update fields allowed
@@ -358,21 +744,22 @@ async function handleRequest(req, res) {
         if (body.notes !== undefined) currentRequests[index].adminNotes = body.notes;
 
         await writeJson(REQUESTS_FILE, currentRequests);
-        return sendJson(res, 200, { success: true, booking: currentRequests[index] });
+        return sendJson(res, 200, { success: true, booking: currentRequests[index] }, { cors: false, noStore: true });
       }
 
-      // DELETE /api/requests/:id
+      // DELETE /api/requests/:id (Admin protected)
       if (pathname.startsWith('/api/requests/') && method === 'DELETE') {
-        const id = pathname.replace('/api/requests/', '');
+        if (!requireAdminApiAuth(req, res)) return;
+        const id = decodeURIComponent(pathname.slice('/api/requests/'.length));
         const currentRequests = await readJson(REQUESTS_FILE, []);
         const filtered = currentRequests.filter(r => r.id !== id);
 
         if (filtered.length === currentRequests.length) {
-          return sendJson(res, 404, { success: false, message: 'Request not found' });
+          return sendJson(res, 404, { success: false, message: 'Request not found' }, { cors: false, noStore: true });
         }
 
         await writeJson(REQUESTS_FILE, filtered);
-        return sendJson(res, 200, { success: true, message: 'Request deleted successfully' });
+        return sendJson(res, 200, { success: true, message: 'Request deleted successfully' }, { cors: false, noStore: true });
       }
 
       return sendJson(res, 404, { success: false, message: 'API route not found' });
@@ -384,30 +771,60 @@ async function handleRequest(req, res) {
 
   // --- STATIC WEB PAGES & ASSETS ---
   if (method === 'GET' || method === 'HEAD') {
-    if (pathname === '/' || pathname === '/index.html') {
+    let staticPath = pathname;
+    try {
+      staticPath = path.posix.normalize(decodeURIComponent(pathname));
+    } catch (_) {
+      res.writeHead(400, securityHeaders({ 'Content-Type': 'text/plain' }));
+      return res.end('Bad Request');
+    }
+
+    if (staticPath === '/' || staticPath === '/index.html') {
       return serveStatic(res, path.join(PUBLIC_DIR, 'index.html'));
     }
-    if (pathname === '/admin' || pathname === '/admin.html') {
-      return serveStatic(res, path.join(PUBLIC_DIR, 'admin.html'));
+
+    if (staticPath === '/admin' || staticPath === '/admin/' || staticPath === '/admin.html') {
+      const config = getAdminConfig();
+      if (!config.password) {
+        return sendHtml(res, 503, renderAdminUnconfiguredPage());
+      }
+      if (!isAdminAuthenticated(req, config)) {
+        if (staticPath === '/admin.html') {
+          res.writeHead(302, securityHeaders({ Location: '/admin', 'Cache-Control': 'no-store' }));
+          return res.end();
+        }
+        return sendHtml(res, 200, renderAdminLoginPage());
+      }
+      return serveStatic(res, path.join(PUBLIC_DIR, 'admin.html'), { noStore: true });
+    }
+
+    if (staticPath === '/js/admin.js') {
+      const config = getAdminConfig();
+      if (!config.password || !isAdminAuthenticated(req, config)) {
+        res.writeHead(401, securityHeaders({ 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }));
+        return res.end('Authentication required');
+      }
+      return serveStatic(res, path.join(PUBLIC_DIR, 'js', 'admin.js'), { noStore: true });
     }
 
     // Static asset request
-    const candidatePath = path.join(PUBLIC_DIR, pathname);
+    const candidatePath = path.join(PUBLIC_DIR, staticPath);
     return serveStatic(res, candidatePath);
   }
 
-  res.writeHead(405, { 'Content-Type': 'text/plain' });
+  res.writeHead(405, securityHeaders({ 'Content-Type': 'text/plain' }));
   res.end('Method Not Allowed');
 }
 
 const server = http.createServer(handleRequest);
 
 if (require.main === module) {
-  server.listen(PORT, () => {
+  const adminConfigured = Boolean(getAdminConfig().password);
+  server.listen(PORT, HOST, () => {
     console.log(`====================================================`);
-    console.log(`🐴 PonyPals Party Rides Server is LIVE on port ${PORT}!`);
-    console.log(`🌟 Website: http://localhost:${PORT}`);
-    console.log(`📋 Admin Dashboard: http://localhost:${PORT}/admin`);
+    console.log(`PonyPals Party Rides Server listening on http://${HOST}:${PORT}`);
+    console.log(`Website: http://${HOST}:${PORT}`);
+    console.log(`Admin Dashboard: http://${HOST}:${PORT}/admin (${adminConfigured ? 'auth enabled' : 'LOCKED - set ADMIN_PASSWORD'})`);
     console.log(`====================================================`);
   });
 }
@@ -418,5 +835,7 @@ handleRequest.server = server;
 handleRequest.handleRequest = handleRequest;
 handleRequest.readJson = readJson;
 handleRequest.writeJson = writeJson;
+handleRequest.HOST = HOST;
+handleRequest.PORT = PORT;
 
 module.exports = handleRequest;

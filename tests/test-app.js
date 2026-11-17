@@ -16,14 +16,15 @@ process.on('exit', () => {
   try { fs.unlinkSync(tmpRequestsFile); } catch (_) { /* already gone */ }
 });
 
-const { handleRequest } = require('../server.js');
+const { handleRequest, HOST } = require('../server.js');
 
 class MockRequest extends EventEmitter {
   constructor(method, url, body = null, headers = {}) {
     super();
     this.method = method;
     this.url = url;
-    this.headers = { host: 'localhost:3000', ...headers };
+    this.headers = { host: '127.0.0.1:3000', ...headers };
+    this.socket = { remoteAddress: '127.0.0.1', encrypted: false };
     this._body = body ? JSON.stringify(body) : null;
   }
 
@@ -82,8 +83,8 @@ class MockResponse {
   }
 }
 
-async function simulate(method, url, body = null) {
-  const req = new MockRequest(method, url, body);
+async function simulate(method, url, body = null, headers = {}) {
+  const req = new MockRequest(method, url, body, headers);
   const res = new MockResponse();
   const promise = res.waitForResponse();
   handleRequest(req, res);
@@ -106,7 +107,14 @@ async function runTests() {
     }
   }
 
+  const prevUser = process.env.ADMIN_USER;
+  const prevPass = process.env.ADMIN_PASSWORD;
+
   try {
+    // 0. Default bind host
+    console.log('\nTest 0: Localhost binding configuration');
+    assert(HOST === '127.0.0.1', `Default bind host is 127.0.0.1 (got ${HOST})`);
+
     // 1. GET /
     console.log('\nTest 1: Serving Homepage (index.html)');
     const resHome = await simulate('GET', '/');
@@ -140,7 +148,7 @@ async function runTests() {
     assert(resInvalid.statusCode === 400, 'Empty required fields return 400');
     assert(resInvalid.json.errors && resInvalid.json.errors.length > 0, 'Returns error list');
 
-    // 5. POST /api/requests (Full Party Request with Input Box Notes)
+    // 5. POST /api/requests (Public Party Request with Input Box Notes)
     console.log('\nTest 5: POST /api/requests (Party Request Submission with Custom Input Box)');
     const customRequestText = 'Charlotte is turning 5! She loves pink unicorns and apples. Can handler please wear flower crown? Wide side yard gate is ready.';
     const bookingPayload = {
@@ -168,34 +176,81 @@ async function runTests() {
     assert(resSubmit.json.booking.specialRequests === customRequestText, 'Special request input text saved accurately');
     const createdId = resSubmit.json.booking.id;
 
-    // 6. GET /api/requests (Confirm request is in list)
-    console.log('\nTest 6: GET /api/requests (Verify persistence)');
-    const resList = await simulate('GET', '/api/requests');
-    assert(resList.statusCode === 200, 'Requests list returns 200');
+    // 6. Admin fail-closed when ADMIN_PASSWORD is not set
+    console.log('\nTest 6: Admin portal fails closed without ADMIN_PASSWORD');
+    delete process.env.ADMIN_PASSWORD;
+    const resLockedAdmin = await simulate('GET', '/admin');
+    assert(resLockedAdmin.statusCode === 503, 'Unconfigured /admin returns 503');
+    const resLockedApi = await simulate('GET', '/api/requests');
+    assert(resLockedApi.statusCode === 503, 'Unconfigured /api/requests returns 503');
+
+    // Configure admin credentials for remaining auth tests
+    process.env.ADMIN_USER = 'owner';
+    process.env.ADMIN_PASSWORD = 'correct-horse-battery-staple';
+
+    // 7. Unauthenticated admin access is rejected
+    console.log('\nTest 7: Unauthenticated admin access control');
+    const resUnauthList = await simulate('GET', '/api/requests');
+    assert(resUnauthList.statusCode === 401, 'Unauthenticated GET /api/requests returns 401');
+    const resUnauthStats = await simulate('GET', '/api/stats');
+    assert(resUnauthStats.statusCode === 401, 'Unauthenticated GET /api/stats returns 401');
+    const resUnauthPatch = await simulate('PATCH', `/api/requests/${createdId}`, { status: 'Confirmed' });
+    assert(resUnauthPatch.statusCode === 401, 'Unauthenticated PATCH /api/requests/:id returns 401');
+    const resUnauthDel = await simulate('DELETE', `/api/requests/${createdId}`);
+    assert(resUnauthDel.statusCode === 401, 'Unauthenticated DELETE /api/requests/:id returns 401');
+    const resUnauthJs = await simulate('GET', '/js/admin.js');
+    assert(resUnauthJs.statusCode === 401, 'Unauthenticated GET /js/admin.js returns 401');
+    const resLoginPrompt = await simulate('GET', '/admin');
+    assert(resLoginPrompt.statusCode === 200 && resLoginPrompt.text.includes('adminLoginForm'), 'Unauthenticated GET /admin shows sign-in form');
+    assert(!resLoginPrompt.text.includes('requestsTbody'), 'Unauthenticated GET /admin does not expose admin table');
+    const resAdminHtmlRedirect = await simulate('GET', '/admin.html');
+    assert(resAdminHtmlRedirect.statusCode === 302 && resAdminHtmlRedirect.headers.Location === '/admin', 'Unauthenticated GET /admin.html redirects to /admin');
+
+    // 8. Admin login, authenticated workflows, and logout
+    console.log('\nTest 8: Admin sign-in, authenticated API/dashboard, and sign-out');
+    const resBadLogin = await simulate('POST', '/api/admin/login', { username: 'owner', password: 'wrong' });
+    assert(resBadLogin.statusCode === 401, 'Wrong password returns 401');
+
+    const resLogin = await simulate('POST', '/api/admin/login', {
+      username: 'owner',
+      password: 'correct-horse-battery-staple'
+    });
+    assert(resLogin.statusCode === 200 && resLogin.json.success === true, 'Valid login returns 200');
+    const setCookie = resLogin.headers['Set-Cookie'] || '';
+    assert(setCookie.includes('HttpOnly') && setCookie.includes('SameSite=Strict'), 'Session cookie sets HttpOnly and SameSite=Strict');
+    const cookieHeader = setCookie.split(';')[0];
+
+    const resList = await simulate('GET', '/api/requests', null, { cookie: cookieHeader });
+    assert(resList.statusCode === 200, 'Authenticated GET /api/requests returns 200');
     const found = resList.json.requests.find(r => r.id === createdId);
     assert(found !== undefined, `Found newly created booking ${createdId} in requests list`);
 
-    // 7. PATCH /api/requests/:id (Owner updates status to Confirmed)
-    console.log('\nTest 7: PATCH /api/requests/:id');
-    const resPatch = await simulate('PATCH', `/api/requests/${createdId}`, { status: 'Confirmed' });
-    assert(resPatch.statusCode === 200, 'Status updated with 200');
+    const resPatch = await simulate('PATCH', `/api/requests/${createdId}`, { status: 'Confirmed' }, { cookie: cookieHeader });
+    assert(resPatch.statusCode === 200, 'Authenticated PATCH updates status with 200');
     assert(resPatch.json.booking.status === 'Confirmed', 'Booking status is now Confirmed');
 
-    // 8. GET /api/stats (Verify stats calculation)
-    console.log('\nTest 8: GET /api/stats');
-    const resStats = await simulate('GET', '/api/stats');
-    assert(resStats.statusCode === 200, 'Stats returned 200');
+    const resStats = await simulate('GET', '/api/stats', null, { cookie: cookieHeader });
+    assert(resStats.statusCode === 200, 'Authenticated GET /api/stats returns 200');
     assert(resStats.json.confirmed >= 1, `Confirmed count is ${resStats.json.confirmed}`);
     assert(resStats.json.revenue >= 430, `Confirmed revenue is $${resStats.json.revenue}`);
 
-    // 9. GET /admin
-    console.log('\nTest 9: Admin portal route (admin.html)');
-    const resAdmin = await simulate('GET', '/admin');
-    assert(resAdmin.statusCode === 200, 'Admin page returns 200');
-    assert(resAdmin.text.includes('Party requests'), 'Admin page contains header');
+    const resAdmin = await simulate('GET', '/admin', null, { cookie: cookieHeader });
+    assert(resAdmin.statusCode === 200, 'Authenticated admin page returns 200');
+    assert(resAdmin.text.includes('Party requests'), 'Authenticated admin page contains dashboard header');
+    assert(resAdmin.text.includes('logoutBtn'), 'Authenticated admin page contains sign-out button');
 
-    // 10. Design guardrails + script/markup consistency
-    console.log('\nTest 10: Front-end consistency checks');
+    const resAdminJs = await simulate('GET', '/js/admin.js', null, { cookie: cookieHeader });
+    assert(resAdminJs.statusCode === 200, 'Authenticated GET /js/admin.js returns 200');
+
+    const basicHeader = 'Basic ' + Buffer.from('owner:correct-horse-battery-staple').toString('base64');
+    const resDel = await simulate('DELETE', `/api/requests/${createdId}`, null, { authorization: basicHeader });
+    assert(resDel.statusCode === 200, 'Basic Auth DELETE /api/requests/:id returns 200');
+
+    const resLogout = await simulate('POST', '/api/admin/logout', null, { cookie: cookieHeader });
+    assert(resLogout.statusCode === 200 && (resLogout.headers['Set-Cookie'] || '').includes('Max-Age=0'), 'Logout clears session cookie');
+
+    // 9. Front-end consistency checks
+    console.log('\nTest 9: Front-end consistency checks');
     const read = p => fs.readFileSync(path.join(__dirname, '..', 'public', p), 'utf-8');
     const emojiRe = /\p{Extended_Pictographic}/u;
     for (const file of ['index.html', 'admin.html', 'js/app.js', 'js/admin.js']) {
@@ -222,6 +277,11 @@ async function runTests() {
   } catch (err) {
     console.error('Unexpected test error:', err);
     process.exit(1);
+  } finally {
+    if (prevUser === undefined) delete process.env.ADMIN_USER;
+    else process.env.ADMIN_USER = prevUser;
+    if (prevPass === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = prevPass;
   }
 }
 

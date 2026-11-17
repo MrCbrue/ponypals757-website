@@ -1,0 +1,7 @@
+# Environment variables (never commit admin credentials)
+.env
+.env.*
+
+# Dependencies & logs
+node_modules/
+*.log

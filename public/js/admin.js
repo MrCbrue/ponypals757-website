@@ -18,6 +18,10 @@ document.addEventListener('DOMContentLoaded', () => {
   async function fetchRequests() {
     try {
       const res = await fetch('/api/requests');
+      if (res.status === 401) {
+        window.location.href = '/admin';
+        return;
+      }
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
       allRequests = data.requests;
@@ -112,6 +116,10 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
+      if (res.status === 401) {
+        window.location.href = '/admin';
+        return;
+      }
       const result = await res.json();
       if (!result.success) throw new Error(result.message);
       const req = allRequests.find(r => r.id === id);
@@ -131,6 +139,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!confirm(`Delete request ${id}? This can't be undone.`)) return;
     try {
       const res = await fetch(`/api/requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (res.status === 401) {
+        window.location.href = '/admin';
+        return;
+      }
       const result = await res.json();
       if (!result.success) throw new Error(result.message);
       allRequests = allRequests.filter(r => r.id !== id);
@@ -152,6 +164,14 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   $('refreshBtn').addEventListener('click', fetchRequests);
+
+  $('logoutBtn').addEventListener('click', async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } finally {
+      window.location.href = '/admin';
+    }
+  });
 
   function esc(str) {
     return String(str ?? '')

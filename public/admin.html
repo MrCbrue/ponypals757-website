@@ -28,6 +28,19 @@
     .admin-header .logo-mark .hole { fill: var(--ink); }
     .admin-header .logo-name { font-size: 1.25rem; }
     .admin-header a.back { color: #cfc6b8; font-size: 0.9rem; }
+    .admin-header-actions { display: flex; align-items: center; gap: 16px; }
+    .logout-btn {
+      font: inherit;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #f1ead9;
+      background: transparent;
+      border: 1px solid #5e544b;
+      border-radius: var(--radius);
+      padding: 5px 12px;
+      cursor: pointer;
+    }
+    .logout-btn:hover { border-color: #f1ead9; color: #fff; }
 
     .admin-title {
       display: flex;
@@ -177,7 +190,10 @@
         </svg>
         <span class="logo-name">PonyPals</span>
       </a>
-      <a href="/" class="back">View website</a>
+      <div class="admin-header-actions">
+        <a href="/" class="back">View website</a>
+        <button type="button" id="logoutBtn" class="logout-btn">Sign out</button>
+      </div>
     </div>
   </header>
 
