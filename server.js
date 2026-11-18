@@ -6,26 +6,56 @@ const crypto = require('node:crypto');
 const os = require('node:os');
 
 // Lightweight .env loader (does not override already-set environment variables)
-function loadDotEnv() {
-  try {
-    const envPath = path.join(__dirname, '.env');
-    if (!fsSync.existsSync(envPath)) return;
-    const lines = fsSync.readFileSync(envPath, 'utf-8').split(/\r?\n/);
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx <= 0) continue;
-      const key = trimmed.slice(0, eqIdx).trim();
-      let val = trimmed.slice(eqIdx + 1).trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      if (process.env[key] === undefined) {
-        process.env[key] = val;
-      }
+function parseEnvContent(content) {
+  const result = {};
+  const clean = String(content).replace(/^\uFEFF/, '');
+  for (const rawLine of clean.split(/\r?\n/)) {
+    let line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (/^export\s+/.test(line)) {
+      line = line.replace(/^export\s+/, '').trim();
     }
-  } catch (_) {}
+    const eqIdx = line.indexOf('=');
+    if (eqIdx <= 0) continue;
+    const key = line.slice(0, eqIdx).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+
+    let val = line.slice(eqIdx + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"') && val.length >= 2) ||
+      (val.startsWith("'") && val.endsWith("'") && val.length >= 2)
+    ) {
+      val = val.slice(1, -1);
+    } else {
+      val = val.replace(/\s+#.*$/, '').trim();
+    }
+    result[key] = val;
+  }
+  return result;
+}
+
+function loadDotEnv(explicitPaths = null) {
+  const candidates = explicitPaths || [
+    process.env.PONYPALS_ENV_FILE,
+    path.join(__dirname, '.env'),
+    path.join(process.cwd(), '.env')
+  ].filter(Boolean);
+
+  const seen = new Set();
+  for (const candidate of candidates) {
+    try {
+      const resolved = path.resolve(candidate);
+      if (seen.has(resolved)) continue;
+      seen.add(resolved);
+      if (!fsSync.existsSync(resolved)) continue;
+      const parsed = parseEnvContent(fsSync.readFileSync(resolved, 'utf-8'));
+      for (const [key, val] of Object.entries(parsed)) {
+        if (process.env[key] === undefined) {
+          process.env[key] = val;
+        }
+      }
+    } catch (_) {}
+  }
 }
 loadDotEnv();
 
@@ -42,8 +72,9 @@ try {
   defaultRequests = [];
 }
 
-const HOST = process.env.HOST || '127.0.0.1';
-const PORT = process.env.PORT || 3000;
+const HOST = (process.env.HOST || '').trim() || '127.0.0.1';
+const parsedPort = Number.parseInt((process.env.PORT || '').trim(), 10);
+const PORT = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SEED_REQUESTS_FILE = path.join(DATA_DIR, 'requests.json');
@@ -58,7 +89,7 @@ const ALLOWED_STATUSES = new Set(['Pending', 'Confirmed', 'Completed', 'Cancelle
 const loginAttempts = new Map();
 
 // On Vercel the root directory is read-only. Writable storage lives in os.tmpdir().
-const REQUESTS_FILE = process.env.PONYPALS_REQUESTS_FILE || (
+const REQUESTS_FILE = (process.env.PONYPALS_REQUESTS_FILE || '').trim() || (
   isServerless
     ? path.join(os.tmpdir(), 'ponypals-requests.json')
     : path.join(DATA_DIR, 'requests.json')
@@ -74,6 +105,10 @@ try {
 // Safely ensure requests file exists
 try {
   if (!fsSync.existsSync(REQUESTS_FILE)) {
+    const reqDir = path.dirname(REQUESTS_FILE);
+    if (!fsSync.existsSync(reqDir)) {
+      fsSync.mkdirSync(reqDir, { recursive: true });
+    }
     if (fsSync.existsSync(SEED_REQUESTS_FILE)) {
       fsSync.copyFileSync(SEED_REQUESTS_FILE, REQUESTS_FILE);
     } else {
@@ -88,7 +123,7 @@ let inMemoryRequests = Array.isArray(defaultRequests) ? [...defaultRequests] : [
 // Auth & security helpers
 function getAdminConfig() {
   return {
-    username: process.env.ADMIN_USER || 'admin',
+    username: (process.env.ADMIN_USER || '').trim() || 'admin',
     password: process.env.ADMIN_PASSWORD || '',
     sessionSecret: process.env.ADMIN_SESSION_SECRET || ''
   };
@@ -835,6 +870,8 @@ handleRequest.server = server;
 handleRequest.handleRequest = handleRequest;
 handleRequest.readJson = readJson;
 handleRequest.writeJson = writeJson;
+handleRequest.parseEnvContent = parseEnvContent;
+handleRequest.loadDotEnv = loadDotEnv;
 handleRequest.HOST = HOST;
 handleRequest.PORT = PORT;
 

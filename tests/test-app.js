@@ -16,7 +16,7 @@ process.on('exit', () => {
   try { fs.unlinkSync(tmpRequestsFile); } catch (_) { /* already gone */ }
 });
 
-const { handleRequest, HOST } = require('../server.js');
+const { handleRequest, HOST, parseEnvContent, loadDotEnv } = require('../server.js');
 
 class MockRequest extends EventEmitter {
   constructor(method, url, body = null, headers = {}) {
@@ -265,6 +265,32 @@ async function runTests() {
       const have = idsIn(read(htmlFile));
       const missing = idsUsed(read(jsFile)).filter(id => !have.has(id));
       assert(missing.length === 0, `${jsFile} only references ids present in ${htmlFile}${missing.length ? ' (missing: ' + missing.join(', ') + ')' : ''}`);
+    }
+
+    // 10. Linux .env parsing & precedence checks
+    console.log('\nTest 10: Linux .env parsing and precedence');
+    const parsedEnv = parseEnvContent(
+      '\uFEFF# comment\n' +
+      'export ADMIN_USER=ponyowner\n' +
+      'PORT=3001 # local port\n' +
+      'ADMIN_PASSWORD="my#secret=pass"\n' +
+      "SINGLE_QUOTED='hello world'\n"
+    );
+    assert(parsedEnv.ADMIN_USER === 'ponyowner', 'Parses export prefix and strips UTF-8 BOM');
+    assert(parsedEnv.PORT === '3001', 'Strips inline comment from unquoted value');
+    assert(parsedEnv.ADMIN_PASSWORD === 'my#secret=pass', 'Preserves # and = inside quoted value');
+    assert(parsedEnv.SINGLE_QUOTED === 'hello world', 'Parses single-quoted value');
+
+    const tmpEnvFile = path.join(os.tmpdir(), `ponypals-test-env-${process.pid}.env`);
+    fs.writeFileSync(tmpEnvFile, 'PONYPALS_TEST_VAR=from_file\nADMIN_USER=should_not_override\n', 'utf-8');
+    delete process.env.PONYPALS_TEST_VAR;
+    try {
+      loadDotEnv([tmpEnvFile]);
+      assert(process.env.PONYPALS_TEST_VAR === 'from_file', 'loadDotEnv loads unset variable from file');
+      assert(process.env.ADMIN_USER === 'owner', 'loadDotEnv does not override existing process.env');
+    } finally {
+      delete process.env.PONYPALS_TEST_VAR;
+      try { fs.unlinkSync(tmpEnvFile); } catch (_) {}
     }
 
     console.log(`\n================================`);
