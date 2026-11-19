@@ -13,17 +13,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const anotherBtn = document.getElementById('submitAnotherBtn');
 
   const PACKAGES = {
-    starter: { name: 'Little Buckaroo', price: 225 },
-    carousel: { name: 'Classic Carousel', price: 385 },
-    unicorn: { name: 'Unicorn Gala', price: 545 }
+    'pony-party': { name: 'Pony Party', price: 275, startingAt: true },
+    lesson: { name: 'Lesson', price: 65 },
+    'pony-play-date': { name: 'Pony Play Date', price: 55 },
+    'pony-ride': { name: 'Pony Ride', price: 35 },
+    'pony-rental-for-photos': { name: 'Pony Rental for Photos', price: 275 }
   };
 
-  const ADDONS = {
-    'unicorn-makeover': 45,
-    'petting-pen': 85,
-    'cowboy-hats': 50,
-    'extra-half-hour': 75
-  };
+  const ADDONS = {};
 
   // Earliest bookable date is tomorrow, in the visitor's local time zone
   const dateInput = form.eventDate;
@@ -46,14 +43,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // ----- Running total -----
   function updateTotal() {
     const pkgInput = form.querySelector('input[name="packageId"]:checked');
-    const pkg = PACKAGES[pkgInput?.value] || PACKAGES.carousel;
+    const pkg = PACKAGES[pkgInput?.value] || PACKAGES['pony-party'];
     const extras = [...form.querySelectorAll('input[name="addOns"]:checked')];
     const extrasTotal = extras.reduce((sum, cb) => sum + (ADDONS[cb.value] || 0), 0);
 
     totalEl.textContent = `$${pkg.price + extrasTotal}`;
-    totalDetailEl.textContent = extras.length
-      ? `${pkg.name} plus ${extras.length} extra${extras.length > 1 ? 's' : ''} ($${extrasTotal})`
-      : pkg.name;
+    if (extras.length) {
+      totalDetailEl.textContent = `${pkg.name} plus ${extras.length} extra${extras.length > 1 ? 's' : ''} ($${extrasTotal})`;
+    } else if (pkg.startingAt) {
+      totalDetailEl.textContent = `${pkg.name} (starting at $${pkg.price})`;
+    } else {
+      totalDetailEl.textContent = pkg.name;
+    }
   }
 
   form.addEventListener('change', e => {
@@ -168,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (err) {
       console.error(err);
-      showErrors(["We couldn't send your request. Please check your connection, or call us at (555) 766-9725."], []);
+      showErrors(["We couldn't send your request. Please check your connection and try again."], []);
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = 'Send request';

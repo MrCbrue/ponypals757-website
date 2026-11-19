@@ -8,13 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const tbody = document.getElementById('requestsTbody');
   const $ = id => document.getElementById(id);
 
-  const ADDON_NAMES = {
-    'unicorn-makeover': 'Unicorn horn & ribbons',
-    'petting-pen': 'Petting pen',
-    'cowboy-hats': 'Cowboy hats',
-    'extra-half-hour': 'Extra 30 min'
-  };
-
   async function fetchRequests() {
     try {
       const res = await fetch('/api/requests');
@@ -65,9 +58,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     tbody.innerHTML = rows.map(r => {
       const received = new Date(r.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-      const ponies = r.selectedPonies?.length ? r.selectedPonies.join(', ') : 'No preference';
-      const extras = r.addOns?.length ? r.addOns.map(a => ADDON_NAMES[a] || a).join(', ') : 'None';
-      const child = r.childName && r.childName !== 'Birthday Star' ? esc(r.childName) : 'Birthday kid';
+      const ponies = r.selectedPonies?.length ? `<div class="muted">Ponies: ${esc(r.selectedPonies.join(', '))}</div>` : '';
+      const extras = r.addOns?.length ? `<div class="muted">Extras: ${esc(r.addOns.join(', '))}</div>` : '';
+      const child = r.childName && r.childName !== 'Birthday Star' ? esc(r.childName) : 'Rider';
       const status = String(r.status || 'Pending');
 
       return `
@@ -83,13 +76,13 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
           <td>
             <div class="strong">${esc(r.packageName)}</div>
-            <div class="muted">Ponies: ${esc(ponies)}</div>
-            <div class="muted">Extras: ${esc(extras)}</div>
+            ${ponies}
+            ${extras}
           </td>
           <td>
             <div class="strong">${esc(formatEventDate(r.eventDate))}, ${esc(r.eventTime)}</div>
             <div>${esc(r.locationAddress)}</div>
-            <div class="muted">${child}${r.childAge ? `, turning ${Number(r.childAge)}` : ''} &middot; about ${Number(r.estimatedKids) || '?'} kids &middot; ${esc(r.surfaceType || '')}</div>
+            <div class="muted">${child}${r.childAge ? `, age ${Number(r.childAge)}` : ''} &middot; ${Number(r.estimatedKids) || '?'} rider(s) &middot; ${esc(r.surfaceType || '')}</div>
             ${r.specialRequests ? `<div class="notes">${esc(r.specialRequests)}</div>` : ''}
           </td>
           <td class="strong">$${Number(r.estimatedTotal) || 0}</td>

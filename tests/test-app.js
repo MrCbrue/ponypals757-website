@@ -120,24 +120,37 @@ async function runTests() {
     const resHome = await simulate('GET', '/');
     assert(resHome.statusCode === 200, 'Home returns status 200');
     assert(resHome.text.includes('PonyPals'), 'Home contains brand name');
+    assert(resHome.text.includes('Hampton, Virginia'), 'Home states Hampton, Virginia location');
     assert(resHome.text.includes('specialRequests'), 'Home contains party request input box');
     assert(resHome.text.includes('pkgSelectContainer'), 'Home contains package selector');
+    for (const pkgName of ['Pony Party', 'Lesson', 'Pony Play Date', 'Pony Ride', 'Pony Rental for Photos']) {
+      assert(resHome.text.includes(pkgName), `Home lists package: ${pkgName}`);
+    }
+    for (const placeholder of ['Buttercup', 'Starlight', 'Barnaby', 'Peaches', 'Springfield', 'Little Buckaroo', 'Classic Carousel', 'Unicorn Gala', 'Oakwood', 'Meadowbrook', 'Pleasantville', 'Riverside']) {
+      assert(!resHome.text.includes(placeholder), `Home has no placeholder: ${placeholder}`);
+    }
 
     // 2. GET /api/ponies
     console.log('\nTest 2: GET /api/ponies');
     const resPonies = await simulate('GET', '/api/ponies');
     assert(resPonies.statusCode === 200, 'Ponies API returns status 200');
     assert(resPonies.json.success === true, 'Ponies API success is true');
-    assert(resPonies.json.ponies.length >= 4, `Ponies count is ${resPonies.json.ponies.length}`);
-    const buttercup = resPonies.json.ponies.find(p => p.name === 'Buttercup');
-    assert(buttercup && buttercup.maxRiderWeight === 65, 'Buttercup profile loaded with rider weight');
+    assert(Array.isArray(resPonies.json.ponies) && resPonies.json.ponies.length === 0, 'Placeholder ponies list is empty');
 
     // 3. GET /api/packages
     console.log('\nTest 3: GET /api/packages');
     const resPackages = await simulate('GET', '/api/packages');
     assert(resPackages.statusCode === 200, 'Packages API returns status 200');
-    assert(resPackages.json.packages.length === 3, 'Found 3 packages');
-    assert(resPackages.json.addOns.length >= 4, 'Found add-ons');
+    assert(resPackages.json.packages.length === 5, 'Found 5 packages');
+    const pkgPriceById = Object.fromEntries(resPackages.json.packages.map(p => [p.id, p.price]));
+    assert(
+      pkgPriceById['pony-party'] === 275 &&
+      pkgPriceById['lesson'] === 65 &&
+      pkgPriceById['pony-play-date'] === 55 &&
+      pkgPriceById['pony-ride'] === 35 &&
+      pkgPriceById['pony-rental-for-photos'] === 275,
+      'All 5 package prices match specification'
+    );
 
     // 4. POST /api/requests (Validation failure test)
     console.log('\nTest 4: POST /api/requests validation errors');
@@ -148,23 +161,21 @@ async function runTests() {
     assert(resInvalid.statusCode === 400, 'Empty required fields return 400');
     assert(resInvalid.json.errors && resInvalid.json.errors.length > 0, 'Returns error list');
 
-    // 5. POST /api/requests (Public Party Request with Input Box Notes)
-    console.log('\nTest 5: POST /api/requests (Party Request Submission with Custom Input Box)');
-    const customRequestText = 'Charlotte is turning 5! She loves pink unicorns and apples. Can handler please wear flower crown? Wide side yard gate is ready.';
+    // 5. POST /api/requests (Public Request with Input Box Notes)
+    console.log('\nTest 5: POST /api/requests (Booking Request Submission with Custom Input Box)');
+    const customRequestText = 'Themed party in Hampton! Looking forward to celebrating with Pony Pals.';
     const bookingPayload = {
       parentName: 'Jennifer Hayes',
       email: 'jennifer.hayes@example.com',
-      phone: '(555) 421-9988',
+      phone: '(757) 555-0142',
       childName: 'Charlotte',
       childAge: 5,
       eventDate: '2026-12-05',
-      eventTime: 'Early Afternoon (1:00 PM - 3:00 PM)',
-      locationAddress: '88 Whispering Pines Way, Meadowbrook',
-      surfaceType: 'Backyard Lawn (Grass)',
-      estimatedKids: 14,
-      packageId: 'carousel', // $385
-      selectedPonies: ['Buttercup', 'Starlight'],
-      addOns: ['unicorn-makeover'], // +$45
+      eventTime: 'Early afternoon (1 to 3pm)',
+      locationAddress: 'Hampton, VA',
+      surfaceType: 'Backyard grass',
+      estimatedKids: 12,
+      packageId: 'pony-party', // $275
       specialRequests: customRequestText
     };
 
@@ -172,7 +183,7 @@ async function runTests() {
     assert(resSubmit.statusCode === 201, 'Request created with status 201');
     assert(resSubmit.json.success === true, 'Success flag is true');
     assert(resSubmit.json.booking.id.startsWith('REQ-'), `Generated ID: ${resSubmit.json.booking.id}`);
-    assert(resSubmit.json.booking.estimatedTotal === 430, `Estimated total calculated ($385 + $45 = $430): got $${resSubmit.json.booking.estimatedTotal}`);
+    assert(resSubmit.json.booking.estimatedTotal === 275, `Estimated total calculated ($275): got $${resSubmit.json.booking.estimatedTotal}`);
     assert(resSubmit.json.booking.specialRequests === customRequestText, 'Special request input text saved accurately');
     const createdId = resSubmit.json.booking.id;
 
@@ -231,8 +242,8 @@ async function runTests() {
 
     const resStats = await simulate('GET', '/api/stats', null, { cookie: cookieHeader });
     assert(resStats.statusCode === 200, 'Authenticated GET /api/stats returns 200');
-    assert(resStats.json.confirmed >= 1, `Confirmed count is ${resStats.json.confirmed}`);
-    assert(resStats.json.revenue >= 430, `Confirmed revenue is $${resStats.json.revenue}`);
+    assert(resStats.json.confirmed === 1, `Confirmed count is ${resStats.json.confirmed}`);
+    assert(resStats.json.revenue === 275, `Confirmed revenue is $${resStats.json.revenue}`);
 
     const resAdmin = await simulate('GET', '/admin', null, { cookie: cookieHeader });
     assert(resAdmin.statusCode === 200, 'Authenticated admin page returns 200');
