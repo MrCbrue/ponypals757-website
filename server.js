@@ -300,7 +300,7 @@ function renderAdminLoginPage() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Owner Sign In | PonyPals</title>
+  <title>Owner Sign In | PonyPals757</title>
   <meta name="robots" content="noindex">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -379,7 +379,7 @@ function renderAdminUnconfiguredPage() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Owner Portal Locked | PonyPals</title>
+  <title>Owner Portal Locked | PonyPals757</title>
   <meta name="robots" content="noindex">
   <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -733,7 +733,7 @@ async function handleRequest(req, res) {
           eventDate: body.eventDate,
           eventTime: body.eventTime || 'Afternoon (1:00 PM - 3:00 PM)',
           locationAddress: body.locationAddress.trim(),
-          surfaceType: body.surfaceType || 'Lawn / Grass',
+          surfaceType: body.surfaceType ? String(body.surfaceType).trim() : '',
           estimatedKids: body.estimatedKids ? Number(body.estimatedKids) : 10,
           packageId: selectedPackage.id,
           packageName: selectedPackage.name,

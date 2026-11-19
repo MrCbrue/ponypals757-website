@@ -139,7 +139,6 @@ document.addEventListener('DOMContentLoaded', () => {
       eventDate: dateInput.value,
       eventTime: form.eventTime.value,
       locationAddress: form.locationAddress.value.trim(),
-      surfaceType: form.surfaceType.value,
       childName: form.childName.value.trim(),
       childAge: form.childAge.value ? parseInt(form.childAge.value, 10) : null,
       estimatedKids: form.estimatedKids.value ? parseInt(form.estimatedKids.value, 10) : null,

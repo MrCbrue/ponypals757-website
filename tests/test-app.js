@@ -119,7 +119,8 @@ async function runTests() {
     console.log('\nTest 1: Serving Homepage (index.html)');
     const resHome = await simulate('GET', '/');
     assert(resHome.statusCode === 200, 'Home returns status 200');
-    assert(resHome.text.includes('PonyPals'), 'Home contains brand name');
+    assert(resHome.text.includes('PonyPals757'), 'Home contains PonyPals757 brand name');
+    assert(!resHome.text.includes('id="surfaceType"'), 'Home has removed the setting dropdown');
     assert(resHome.text.includes('Hampton, Virginia'), 'Home states Hampton, Virginia location');
     assert(resHome.text.includes('specialRequests'), 'Home contains party request input box');
     assert(resHome.text.includes('pkgSelectContainer'), 'Home contains package selector');
@@ -167,7 +168,7 @@ async function runTests() {
 
     // 5. POST /api/requests (Public Request with Input Box Notes)
     console.log('\nTest 5: POST /api/requests (Booking Request Submission with Custom Input Box)');
-    const customRequestText = 'Themed party in Hampton! Looking forward to celebrating with Pony Pals.';
+    const customRequestText = 'Themed party in Hampton! Backyard lawn with wide side gate.';
     const bookingPayload = {
       parentName: 'Jennifer Hayes',
       email: 'jennifer.hayes@example.com',
@@ -177,7 +178,6 @@ async function runTests() {
       eventDate: '2026-12-05',
       eventTime: 'Early afternoon (1 to 3pm)',
       locationAddress: 'Hampton, VA',
-      surfaceType: 'Backyard grass',
       estimatedKids: 12,
       packageId: 'pony-party', // $275
       specialRequests: customRequestText

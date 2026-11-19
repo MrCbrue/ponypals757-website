@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>
             <div class="strong">${esc(formatEventDate(r.eventDate))}, ${esc(r.eventTime)}</div>
             <div>${esc(r.locationAddress)}</div>
-            <div class="muted">${child}${r.childAge ? `, age ${Number(r.childAge)}` : ''} &middot; ${Number(r.estimatedKids) || '?'} rider(s) &middot; ${esc(r.surfaceType || '')}</div>
+            <div class="muted">${child}${r.childAge ? `, age ${Number(r.childAge)}` : ''} &middot; ${Number(r.estimatedKids) || '?'} rider(s)${r.surfaceType ? ` &middot; ${esc(r.surfaceType)}` : ''}</div>
             ${r.specialRequests ? `<div class="notes">${esc(r.specialRequests)}</div>` : ''}
           </td>
           <td class="strong">$${Number(r.estimatedTotal) || 0}</td>
