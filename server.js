@@ -88,12 +88,42 @@ const LOGIN_MAX_FAILURES = 10;
 const ALLOWED_STATUSES = new Set(['Pending', 'Confirmed', 'Completed', 'Cancelled']);
 const loginAttempts = new Map();
 
-// On Vercel the root directory is read-only. Writable storage lives in os.tmpdir().
-const REQUESTS_FILE = (process.env.PONYPALS_REQUESTS_FILE || '').trim() || (
-  isServerless
-    ? path.join(os.tmpdir(), 'ponypals-requests.json')
-    : path.join(DATA_DIR, 'requests.json')
+const TMP_REQUESTS_FILE = path.join(os.tmpdir(), 'ponypals-requests.json');
+const configuredRequestsFile = (process.env.PONYPALS_REQUESTS_FILE || '').trim();
+let activeRequestsFile = configuredRequestsFile || (
+  isServerless ? TMP_REQUESTS_FILE : path.join(DATA_DIR, 'requests.json')
 );
+const REQUESTS_FILE = activeRequestsFile;
+
+function isPathWritable(targetPath) {
+  try {
+    if (fsSync.existsSync(targetPath)) {
+      fsSync.accessSync(targetPath, fsSync.constants.W_OK);
+      return true;
+    }
+    const dir = path.dirname(targetPath);
+    if (fsSync.existsSync(dir)) {
+      fsSync.accessSync(dir, fsSync.constants.W_OK);
+      return true;
+    }
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+function ensureRequestsFileInitialized(filePath) {
+  if (fsSync.existsSync(filePath)) return;
+  const reqDir = path.dirname(filePath);
+  if (!fsSync.existsSync(reqDir)) {
+    fsSync.mkdirSync(reqDir, { recursive: true });
+  }
+  if (fsSync.existsSync(SEED_REQUESTS_FILE)) {
+    fsSync.copyFileSync(SEED_REQUESTS_FILE, filePath);
+  } else {
+    fsSync.writeFileSync(filePath, JSON.stringify(defaultRequests, null, 2), 'utf-8');
+  }
+}
 
 // Safely ensure data directory exists in non-serverless mode
 try {
@@ -102,23 +132,29 @@ try {
   }
 } catch (_) {}
 
-// Safely ensure requests file exists
+// Ensure active requests file exists and is writable; otherwise fall back to os.tmpdir()
 try {
-  if (!fsSync.existsSync(REQUESTS_FILE)) {
-    const reqDir = path.dirname(REQUESTS_FILE);
-    if (!fsSync.existsSync(reqDir)) {
-      fsSync.mkdirSync(reqDir, { recursive: true });
-    }
-    if (fsSync.existsSync(SEED_REQUESTS_FILE)) {
-      fsSync.copyFileSync(SEED_REQUESTS_FILE, REQUESTS_FILE);
-    } else {
-      fsSync.writeFileSync(REQUESTS_FILE, JSON.stringify(defaultRequests, null, 2), 'utf-8');
-    }
-  }
+  ensureRequestsFileInitialized(activeRequestsFile);
 } catch (_) {}
 
-// In-memory cache for fast access and fallback if filesystem is locked/read-only
+if (!configuredRequestsFile && !isServerless && !isPathWritable(activeRequestsFile)) {
+  console.warn(`[PonyPals757] Warning: ${activeRequestsFile} is not writable; falling back to ${TMP_REQUESTS_FILE}`);
+  activeRequestsFile = TMP_REQUESTS_FILE;
+  try {
+    ensureRequestsFileInitialized(activeRequestsFile);
+  } catch (_) {}
+}
+
+// In-memory cache and persistence state
 let inMemoryRequests = Array.isArray(defaultRequests) ? [...defaultRequests] : [];
+let diskPersistenceOk = true;
+let requestsMutex = Promise.resolve();
+
+function withRequestsLock(fn) {
+  const next = requestsMutex.then(fn, fn);
+  requestsMutex = next.catch(() => {});
+  return next;
+}
 
 // Auth & security helpers
 function getAdminConfig() {
@@ -394,45 +430,81 @@ function renderAdminUnconfiguredPage() {
 }
 
 // Helpers
+function isRequestsPath(filePath) {
+  return filePath === REQUESTS_FILE || filePath === activeRequestsFile;
+}
+
 async function readJson(filePath, fallback = []) {
-  if (filePath === REQUESTS_FILE && inMemoryRequests && inMemoryRequests.length > 0) {
+  if (isRequestsPath(filePath)) {
+    if (!diskPersistenceOk) {
+      return [...inMemoryRequests];
+    }
     try {
-      const content = await fs.readFile(filePath, 'utf-8');
+      const content = await fs.readFile(activeRequestsFile, 'utf-8');
       const parsed = JSON.parse(content);
-      inMemoryRequests = parsed;
-      return parsed;
+      if (Array.isArray(parsed)) {
+        inMemoryRequests = parsed;
+        return [...parsed];
+      }
+      return [...inMemoryRequests];
     } catch (_) {
-      return inMemoryRequests;
+      return [...inMemoryRequests];
     }
   }
 
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const parsed = JSON.parse(content);
-    if (filePath === REQUESTS_FILE) inMemoryRequests = parsed;
-    return parsed;
+    return JSON.parse(content);
   } catch (err) {
     if (filePath === PONIES_FILE) return defaultPonies;
     if (filePath === PACKAGES_FILE) return defaultPackages;
-    if (filePath === REQUESTS_FILE) return inMemoryRequests || defaultRequests || fallback;
     return fallback;
   }
 }
 
-async function writeJson(filePath, data) {
-  if (filePath === REQUESTS_FILE) {
-    inMemoryRequests = data;
+async function writeFileDurable(targetPath, jsonStr) {
+  const dir = path.dirname(targetPath);
+  if (!fsSync.existsSync(dir)) {
+    fsSync.mkdirSync(dir, { recursive: true });
   }
+  const tempPath = `${targetPath}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  await fs.writeFile(tempPath, jsonStr, 'utf-8');
   try {
-    const dir = path.dirname(filePath);
-    if (!fsSync.existsSync(dir)) {
-      fsSync.mkdirSync(dir, { recursive: true });
-    }
-    const tempPath = `${filePath}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8');
-    await fs.rename(tempPath, filePath);
+    await fs.rename(tempPath, targetPath);
+  } catch (renameErr) {
+    try { await fs.unlink(tempPath); } catch (_) {}
+    // Fallback for bind-mounted files or filesystems that disallow rename over target
+    await fs.writeFile(targetPath, jsonStr, 'utf-8');
+  }
+}
+
+async function writeJson(filePath, data) {
+  const jsonStr = JSON.stringify(data, null, 2);
+  if (!isRequestsPath(filePath)) {
+    await writeFileDurable(filePath, jsonStr);
+    return;
+  }
+
+  inMemoryRequests = [...data];
+  try {
+    await writeFileDurable(activeRequestsFile, jsonStr);
+    diskPersistenceOk = true;
   } catch (err) {
-    console.warn(`[PonyPals] Storage note: disk write (${err.message}), using memory cache.`);
+    if (!configuredRequestsFile && activeRequestsFile !== TMP_REQUESTS_FILE) {
+      try {
+        await writeFileDurable(TMP_REQUESTS_FILE, jsonStr);
+        activeRequestsFile = TMP_REQUESTS_FILE;
+        diskPersistenceOk = true;
+        console.warn(`[PonyPals757] Warning: ${REQUESTS_FILE} not writable (${err.message}); persisted to ${TMP_REQUESTS_FILE}.`);
+        return;
+      } catch (tmpErr) {
+        diskPersistenceOk = false;
+        console.warn(`[PonyPals757] Storage note: disk write failed (${tmpErr.message}), keeping requests in memory.`);
+        return;
+      }
+    }
+    diskPersistenceOk = false;
+    console.warn(`[PonyPals757] Storage note: disk write failed (${err.message}), keeping requests in memory.`);
   }
 }
 
@@ -745,11 +817,13 @@ async function handleRequest(req, res) {
           estimatedTotal: calculatedTotal
         };
 
-        const currentRequests = await readJson(REQUESTS_FILE, []);
-        currentRequests.unshift(newBooking);
-        await writeJson(REQUESTS_FILE, currentRequests);
+        await withRequestsLock(async () => {
+          const currentRequests = await readJson(REQUESTS_FILE, []);
+          currentRequests.unshift(newBooking);
+          await writeJson(REQUESTS_FILE, currentRequests);
+        });
 
-        console.log(`[PonyPals] New party request created: ${newBooking.id} by ${newBooking.parentName}`);
+        console.log(`[PonyPals757] New party request created: ${newBooking.id} by ${newBooking.parentName}`);
 
         return sendJson(res, 201, {
           success: true,
@@ -767,33 +841,42 @@ async function handleRequest(req, res) {
           return sendJson(res, 400, { success: false, message: 'Invalid status value' }, { cors: false, noStore: true });
         }
 
-        const currentRequests = await readJson(REQUESTS_FILE, []);
-        const index = currentRequests.findIndex(r => r.id === id);
+        const updatedBooking = await withRequestsLock(async () => {
+          const currentRequests = await readJson(REQUESTS_FILE, []);
+          const index = currentRequests.findIndex(r => r.id === id);
+          if (index === -1) return null;
 
-        if (index === -1) {
+          if (body.status) currentRequests[index].status = body.status;
+          if (body.notes !== undefined) currentRequests[index].adminNotes = body.notes;
+
+          await writeJson(REQUESTS_FILE, currentRequests);
+          return currentRequests[index];
+        });
+
+        if (!updatedBooking) {
           return sendJson(res, 404, { success: false, message: 'Request not found' }, { cors: false, noStore: true });
         }
 
-        // Update fields allowed
-        if (body.status) currentRequests[index].status = body.status;
-        if (body.notes !== undefined) currentRequests[index].adminNotes = body.notes;
-
-        await writeJson(REQUESTS_FILE, currentRequests);
-        return sendJson(res, 200, { success: true, booking: currentRequests[index] }, { cors: false, noStore: true });
+        return sendJson(res, 200, { success: true, booking: updatedBooking }, { cors: false, noStore: true });
       }
 
       // DELETE /api/requests/:id (Admin protected)
       if (pathname.startsWith('/api/requests/') && method === 'DELETE') {
         if (!requireAdminApiAuth(req, res)) return;
         const id = decodeURIComponent(pathname.slice('/api/requests/'.length));
-        const currentRequests = await readJson(REQUESTS_FILE, []);
-        const filtered = currentRequests.filter(r => r.id !== id);
 
-        if (filtered.length === currentRequests.length) {
+        const deleted = await withRequestsLock(async () => {
+          const currentRequests = await readJson(REQUESTS_FILE, []);
+          const filtered = currentRequests.filter(r => r.id !== id);
+          if (filtered.length === currentRequests.length) return false;
+          await writeJson(REQUESTS_FILE, filtered);
+          return true;
+        });
+
+        if (!deleted) {
           return sendJson(res, 404, { success: false, message: 'Request not found' }, { cors: false, noStore: true });
         }
 
-        await writeJson(REQUESTS_FILE, filtered);
         return sendJson(res, 200, { success: true, message: 'Request deleted successfully' }, { cors: false, noStore: true });
       }
 

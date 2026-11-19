@@ -8,7 +8,7 @@
     },
     {
       "source": "/admin",
-      "destination": "/admin.html"
+      "destination": "/api/index.js"
     }
   ]
 }

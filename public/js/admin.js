@@ -10,14 +10,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchRequests() {
     try {
-      const res = await fetch('/api/requests');
+      const res = await fetch('/api/requests', { cache: 'no-store' });
       if (res.status === 401) {
         window.location.href = '/admin';
         return;
       }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
-      allRequests = data.requests;
+      allRequests = Array.isArray(data.requests) ? data.requests : [];
       updateStats();
       renderTable();
     } catch (err) {
@@ -42,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function formatEventDate(iso) {
     if (!iso) return '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso))) return String(iso);
     const [y, m, d] = iso.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   }
@@ -57,7 +61,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     tbody.innerHTML = rows.map(r => {
-      const received = new Date(r.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      const receivedDate = r.createdAt ? new Date(r.createdAt) : null;
+      const received = receivedDate && !Number.isNaN(receivedDate.getTime())
+        ? receivedDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : '';
       const ponies = r.selectedPonies?.length ? `<div class="muted">Ponies: ${esc(r.selectedPonies.join(', '))}</div>` : '';
       const extras = r.addOns?.length ? `<div class="muted">Extras: ${esc(r.addOns.join(', '))}</div>` : '';
       const child = r.childName && r.childName !== 'Birthday Star' ? esc(r.childName) : 'Rider';
@@ -174,6 +181,12 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      fetchRequests();
+    }
+  });
 
   fetchRequests();
 });

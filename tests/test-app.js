@@ -308,6 +308,50 @@ async function runTests() {
       try { fs.unlinkSync(tmpEnvFile); } catch (_) {}
     }
 
+    // 11. Persistence fallback when requests.json directory is read-only
+    console.log('\nTest 11: Read-only requests.json fallback keeps bookings visible');
+    const roDir = path.join(os.tmpdir(), `ponypals-ro-${process.pid}`);
+    const roFile = path.join(roDir, 'requests.json');
+    fs.mkdirSync(roDir, { recursive: true });
+    fs.writeFileSync(roFile, '[]', { mode: 0o444 });
+    fs.chmodSync(roDir, 0o555);
+    const savedEnvFile = process.env.PONYPALS_REQUESTS_FILE;
+    try {
+      process.env.PONYPALS_REQUESTS_FILE = roFile;
+      delete require.cache[require.resolve('../server.js')];
+      const roServer = require('../server.js');
+      const roSim = (method, url, body = null, headers = {}) => {
+        const req = new MockRequest(method, url, body, headers);
+        const res = new MockResponse();
+        const p = res.waitForResponse();
+        roServer(req, res);
+        req.start();
+        return p;
+      };
+      const roCreate = await roSim('POST', '/api/requests', {
+        parentName: 'ReadOnly Tester',
+        email: 'ro@example.com',
+        phone: '(757) 555-0188',
+        eventDate: '2026-12-15',
+        locationAddress: 'Hampton, VA',
+        packageId: 'pony-ride'
+      });
+      assert(roCreate.statusCode === 201, 'POST /api/requests succeeds even when storage dir is read-only');
+      const roList = await roSim('GET', '/api/requests', null, { authorization: basicHeader });
+      assert(
+        roList.statusCode === 200 && roList.json.requests.some(r => r.id === roCreate.json.booking.id),
+        'GET /api/requests still returns submitted booking when disk write fails'
+      );
+    } finally {
+      if (savedEnvFile === undefined) delete process.env.PONYPALS_REQUESTS_FILE;
+      else process.env.PONYPALS_REQUESTS_FILE = savedEnvFile;
+      delete require.cache[require.resolve('../server.js')];
+      try { fs.chmodSync(roDir, 0o755); } catch (_) {}
+      try { fs.chmodSync(roFile, 0o644); } catch (_) {}
+      try { fs.unlinkSync(roFile); } catch (_) {}
+      try { fs.rmdirSync(roDir); } catch (_) {}
+    }
+
     console.log(`\n================================`);
     console.log(`Test Results: ${passed} Passed, ${failed} Failed`);
     console.log(`================================`);
