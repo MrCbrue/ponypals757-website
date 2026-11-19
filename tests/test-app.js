@@ -129,6 +129,10 @@ async function runTests() {
     for (const placeholder of ['Buttercup', 'Starlight', 'Barnaby', 'Peaches', 'Springfield', 'Little Buckaroo', 'Classic Carousel', 'Unicorn Gala', 'Oakwood', 'Meadowbrook', 'Pleasantville', 'Riverside']) {
       assert(!resHome.text.includes(placeholder), `Home has no placeholder: ${placeholder}`);
     }
+    assert(resHome.text.includes('https://www.tiktok.com/@pony.pals.757'), 'Home includes TikTok link');
+    assert(resHome.text.includes('https://www.facebook.com/profile.php?id=61594421230655'), 'Home includes Facebook link');
+    assert(resHome.text.includes('https://www.instagram.com/ponypals_757'), 'Home includes Instagram link');
+    assert(resHome.text.includes('(757) 920-2340'), 'Home includes phone number (757) 920-2340');
 
     // 2. GET /api/ponies
     console.log('\nTest 2: GET /api/ponies');
