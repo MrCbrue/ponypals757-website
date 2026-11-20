@@ -188,6 +188,16 @@ img { display: block; max-width: 100%; }
 .logo-mark { color: var(--barn); flex-shrink: 0; }
 .logo-mark .hole { fill: var(--paper); }
 
+.logo-custom {
+  display: none;
+  height: 40px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.logo-custom.loaded { display: block; }
+
 .logo-name {
   font-family: var(--serif);
   font-size: 1.55rem;
@@ -214,7 +224,8 @@ img { display: block; max-width: 100%; }
   font-weight: 500;
   text-decoration: none;
 }
-.main-nav a:hover { color: var(--barn); }
+.main-nav a:hover,
+.main-nav a[aria-current="page"] { color: var(--barn); }
 
 /* ---------- Hero ---------- */
 
@@ -866,6 +877,34 @@ select.input {
   text-underline-offset: 3px;
 }
 
+/* ---------- Photo gallery (/photos) ---------- */
+
+.photo-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.gallery-item .photo {
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--line);
+}
+
+.gallery-empty {
+  grid-column: 1 / -1;
+  padding: 48px 28px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.gallery-empty h2 {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+}
+
 /* ---------- Footer ---------- */
 
 .site-footer {
@@ -929,6 +968,7 @@ select.input {
   .booking-aside { position: static; }
   .hero-photo { aspect-ratio: 16 / 10; }
   .social-grid { grid-template-columns: 1fr; }
+  .photo-gallery { grid-template-columns: repeat(2, 1fr); }
   .footer-grid { grid-template-columns: 1fr 1fr; }
 }
 
@@ -937,7 +977,8 @@ select.input {
   .section { padding: 64px 0; }
   .main-nav { display: none; }
   .site-header .container { height: 64px; }
-  .pony-grid { grid-template-columns: 1fr; gap: 44px; }
+  .pony-grid,
+  .photo-gallery { grid-template-columns: 1fr; gap: 24px; }
   .row-2, .row-3, .check-grid { grid-template-columns: 1fr; }
   .booking-form, .confirmation { padding: 26px 20px; }
   .form-footer { flex-direction: column; align-items: stretch; }

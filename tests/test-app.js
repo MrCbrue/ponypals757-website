@@ -268,15 +268,16 @@ async function runTests() {
     console.log('\nTest 9: Front-end consistency checks');
     const read = p => fs.readFileSync(path.join(__dirname, '..', 'public', p), 'utf-8');
     const emojiRe = /\p{Extended_Pictographic}/u;
-    for (const file of ['index.html', 'admin.html', 'js/app.js', 'js/admin.js']) {
+    for (const file of ['index.html', 'photos.html', 'admin.html', 'js/app.js', 'js/photos.js', 'js/admin.js']) {
       assert(!emojiRe.test(read(file)), `${file} contains no emoji`);
     }
     assert(!/gradient\(/.test(read('css/style.css').replace(/url\("data:[^"]*"\)/g, '')), 'Stylesheet uses no gradients');
     assert(!read('index.html').includes('\u2014'), 'Homepage copy has no em dashes');
+    assert(!read('photos.html').includes('\u2014'), 'Photos copy has no em dashes');
 
     const idsIn = (html) => new Set([...html.matchAll(/\sid="([^"]+)"/g)].map(m => m[1]));
     const idsUsed = (js) => [...js.matchAll(/(?:getElementById|\$)\('([^']+)'\)/g)].map(m => m[1]);
-    for (const [htmlFile, jsFile] of [['index.html', 'js/app.js'], ['admin.html', 'js/admin.js']]) {
+    for (const [htmlFile, jsFile] of [['index.html', 'js/app.js'], ['photos.html', 'js/photos.js'], ['admin.html', 'js/admin.js']]) {
       const have = idsIn(read(htmlFile));
       const missing = idsUsed(read(jsFile)).filter(id => !have.has(id));
       assert(missing.length === 0, `${jsFile} only references ids present in ${htmlFile}${missing.length ? ' (missing: ' + missing.join(', ') + ')' : ''}`);
@@ -288,24 +289,58 @@ async function runTests() {
       '\uFEFF# comment\n' +
       'export ADMIN_USER=ponyowner\n' +
       'PORT=3001 # local port\n' +
-      'ADMIN_PASSWORD="my#secret=pass"\n' +
-      "SINGLE_QUOTED='hello world'\n"
+      'ADMIN_PASSWORD="my#secret=pass" # trailing comment\n' +
+      "SINGLE_QUOTED='hello world' # another comment\n"
     );
     assert(parsedEnv.ADMIN_USER === 'ponyowner', 'Parses export prefix and strips UTF-8 BOM');
     assert(parsedEnv.PORT === '3001', 'Strips inline comment from unquoted value');
-    assert(parsedEnv.ADMIN_PASSWORD === 'my#secret=pass', 'Preserves # and = inside quoted value');
-    assert(parsedEnv.SINGLE_QUOTED === 'hello world', 'Parses single-quoted value');
+    assert(parsedEnv.ADMIN_PASSWORD === 'my#secret=pass', 'Preserves # and = inside quoted value and strips trailing comment');
+    assert(parsedEnv.SINGLE_QUOTED === 'hello world', 'Parses single-quoted value with trailing comment');
 
     const tmpEnvFile = path.join(os.tmpdir(), `ponypals-test-env-${process.pid}.env`);
-    fs.writeFileSync(tmpEnvFile, 'PONYPALS_TEST_VAR=from_file\nADMIN_USER=should_not_override\n', 'utf-8');
+    fs.writeFileSync(tmpEnvFile, 'PONYPALS_TEST_VAR=from_file\nPONYPALS_EMPTY_OVERRIDE=filled_from_file\nADMIN_USER=should_not_override\n', 'utf-8');
     delete process.env.PONYPALS_TEST_VAR;
+    process.env.PONYPALS_EMPTY_OVERRIDE = '';
     try {
       loadDotEnv([tmpEnvFile]);
       assert(process.env.PONYPALS_TEST_VAR === 'from_file', 'loadDotEnv loads unset variable from file');
-      assert(process.env.ADMIN_USER === 'owner', 'loadDotEnv does not override existing process.env');
+      assert(process.env.PONYPALS_EMPTY_OVERRIDE === 'filled_from_file', 'loadDotEnv fills empty-string env variable from file');
+      assert(process.env.ADMIN_USER === 'owner', 'loadDotEnv does not override non-empty process.env');
     } finally {
       delete process.env.PONYPALS_TEST_VAR;
+      delete process.env.PONYPALS_EMPTY_OVERRIDE;
       try { fs.unlinkSync(tmpEnvFile); } catch (_) {}
+    }
+
+    // 10b. Photos page, gallery API, and custom logo support
+    console.log('\nTest 10b: /photos page and custom /logo endpoint');
+    assert(resHome.text.includes('href="/photos"'), 'Homepage navigates to /photos');
+    assert(resHome.text.includes('src="/logo"'), 'Homepage checks custom /logo');
+    const resPhotosPage = await simulate('GET', '/photos');
+    assert(resPhotosPage.statusCode === 200 && resPhotosPage.text.includes('photoGallery'), '/photos page returns 200 with gallery container');
+    const resPhotosApi = await simulate('GET', '/api/photos');
+    assert(resPhotosApi.statusCode === 200 && Array.isArray(resPhotosApi.json.photos), 'GET /api/photos returns photos array');
+    const resLogoMissing = await simulate('GET', '/logo');
+    assert(resLogoMissing.statusCode === 404, 'GET /logo returns 404 when no custom logo file exists');
+
+    const imagesDir = path.join(__dirname, '..', 'public', 'images');
+    const tmpLogoPath = path.join(imagesDir, 'logo.png');
+    const tmpPhotoPath = path.join(imagesDir, 'zz-test-photo.png');
+    const onePxPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+    fs.writeFileSync(tmpLogoPath, onePxPng);
+    fs.writeFileSync(tmpPhotoPath, onePxPng);
+    try {
+      const resLogoPresent = await simulate('GET', '/logo');
+      assert(resLogoPresent.statusCode === 200 && resLogoPresent.headers['Content-Type'] === 'image/png', 'GET /logo serves custom logo.png from public/images');
+      const resPhotosWithFiles = await simulate('GET', '/api/photos');
+      assert(
+        resPhotosWithFiles.json.photos.some(p => p.filename === 'zz-test-photo.png') &&
+        !resPhotosWithFiles.json.photos.some(p => p.filename === 'logo.png'),
+        'GET /api/photos lists gallery images and excludes logo.*'
+      );
+    } finally {
+      try { fs.unlinkSync(tmpLogoPath); } catch (_) {}
+      try { fs.unlinkSync(tmpPhotoPath); } catch (_) {}
     }
 
     // 11. Persistence fallback when requests.json directory is read-only

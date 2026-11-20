@@ -5,7 +5,14 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 
-// Lightweight .env loader (does not override already-set environment variables)
+// Lightweight .env loader (does not override non-empty environment variables)
+function expandHomePath(p) {
+  if (!p) return p;
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
+  return p;
+}
+
 function parseEnvContent(content) {
   const result = {};
   const clean = String(content).replace(/^\uFEFF/, '');
@@ -21,11 +28,28 @@ function parseEnvContent(content) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
 
     let val = line.slice(eqIdx + 1).trim();
-    if (
-      (val.startsWith('"') && val.endsWith('"') && val.length >= 2) ||
-      (val.startsWith("'") && val.endsWith("'") && val.length >= 2)
-    ) {
-      val = val.slice(1, -1);
+    const quote = val[0];
+    if (quote === '"' || quote === "'") {
+      let parsed = '';
+      let closed = false;
+      for (let i = 1; i < val.length; i++) {
+        const ch = val[i];
+        if (quote === '"' && ch === '\\' && i + 1 < val.length) {
+          const next = val[i + 1];
+          if (next === 'n') parsed += '\n';
+          else if (next === 'r') parsed += '\r';
+          else if (next === 't') parsed += '\t';
+          else parsed += next;
+          i += 1;
+          continue;
+        }
+        if (ch === quote) {
+          closed = true;
+          break;
+        }
+        parsed += ch;
+      }
+      val = closed ? parsed : val.slice(1);
     } else {
       val = val.replace(/\s+#.*$/, '').trim();
     }
@@ -44,13 +68,13 @@ function loadDotEnv(explicitPaths = null) {
   const seen = new Set();
   for (const candidate of candidates) {
     try {
-      const resolved = path.resolve(candidate);
+      const resolved = path.resolve(expandHomePath(candidate));
       if (seen.has(resolved)) continue;
       seen.add(resolved);
       if (!fsSync.existsSync(resolved)) continue;
       const parsed = parseEnvContent(fsSync.readFileSync(resolved, 'utf-8'));
       for (const [key, val] of Object.entries(parsed)) {
-        if (process.env[key] === undefined) {
+        if (process.env[key] === undefined || process.env[key] === '') {
           process.env[key] = val;
         }
       }
@@ -59,24 +83,12 @@ function loadDotEnv(explicitPaths = null) {
 }
 loadDotEnv();
 
-// Detect serverless environment (Vercel / AWS Lambda)
-const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NOW_REGION);
-
-// Statically require data files so Vercel's bundler guarantees their inclusion
-const defaultPonies = require('./data/ponies.json');
-const defaultPackages = require('./data/packages.json');
-let defaultRequests = [];
-try {
-  defaultRequests = require('./data/requests.json');
-} catch (_) {
-  defaultRequests = [];
-}
-
 const HOST = (process.env.HOST || '').trim() || '127.0.0.1';
 const parsedPort = Number.parseInt((process.env.PORT || '').trim(), 10);
 const PORT = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const IMAGES_DIR = path.join(PUBLIC_DIR, 'images');
 const SEED_REQUESTS_FILE = path.join(DATA_DIR, 'requests.json');
 const PONIES_FILE = path.join(DATA_DIR, 'ponies.json');
 const PACKAGES_FILE = path.join(DATA_DIR, 'packages.json');
@@ -86,13 +98,15 @@ const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
 const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const LOGIN_MAX_FAILURES = 10;
 const ALLOWED_STATUSES = new Set(['Pending', 'Confirmed', 'Completed', 'Cancelled']);
+const CUSTOM_LOGO_NAMES = ['logo.png', 'logo.svg', 'logo.webp', 'logo.jpg', 'logo.jpeg'];
+const GALLERY_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const loginAttempts = new Map();
 
 const TMP_REQUESTS_FILE = path.join(os.tmpdir(), 'ponypals-requests.json');
-const configuredRequestsFile = (process.env.PONYPALS_REQUESTS_FILE || '').trim();
-let activeRequestsFile = configuredRequestsFile || (
-  isServerless ? TMP_REQUESTS_FILE : path.join(DATA_DIR, 'requests.json')
-);
+const configuredRequestsFile = expandHomePath((process.env.PONYPALS_REQUESTS_FILE || '').trim());
+let activeRequestsFile = configuredRequestsFile
+  ? path.resolve(configuredRequestsFile)
+  : path.join(DATA_DIR, 'requests.json');
 const REQUESTS_FILE = activeRequestsFile;
 
 function isPathWritable(targetPath) {
@@ -121,13 +135,13 @@ function ensureRequestsFileInitialized(filePath) {
   if (fsSync.existsSync(SEED_REQUESTS_FILE)) {
     fsSync.copyFileSync(SEED_REQUESTS_FILE, filePath);
   } else {
-    fsSync.writeFileSync(filePath, JSON.stringify(defaultRequests, null, 2), 'utf-8');
+    fsSync.writeFileSync(filePath, '[]\n', 'utf-8');
   }
 }
 
-// Safely ensure data directory exists in non-serverless mode
+// Safely ensure data directory exists
 try {
-  if (!isServerless && !fsSync.existsSync(DATA_DIR)) {
+  if (!fsSync.existsSync(DATA_DIR)) {
     fsSync.mkdirSync(DATA_DIR, { recursive: true });
   }
 } catch (_) {}
@@ -137,7 +151,7 @@ try {
   ensureRequestsFileInitialized(activeRequestsFile);
 } catch (_) {}
 
-if (!configuredRequestsFile && !isServerless && !isPathWritable(activeRequestsFile)) {
+if (!configuredRequestsFile && !isPathWritable(activeRequestsFile)) {
   console.warn(`[PonyPals757] Warning: ${activeRequestsFile} is not writable; falling back to ${TMP_REQUESTS_FILE}`);
   activeRequestsFile = TMP_REQUESTS_FILE;
   try {
@@ -146,7 +160,13 @@ if (!configuredRequestsFile && !isServerless && !isPathWritable(activeRequestsFi
 }
 
 // In-memory cache and persistence state
-let inMemoryRequests = Array.isArray(defaultRequests) ? [...defaultRequests] : [];
+let inMemoryRequests = [];
+try {
+  if (fsSync.existsSync(activeRequestsFile)) {
+    const initial = JSON.parse(fsSync.readFileSync(activeRequestsFile, 'utf-8'));
+    if (Array.isArray(initial)) inMemoryRequests = initial;
+  }
+} catch (_) {}
 let diskPersistenceOk = true;
 let requestsMutex = Promise.resolve();
 
@@ -456,8 +476,6 @@ async function readJson(filePath, fallback = []) {
     const content = await fs.readFile(filePath, 'utf-8');
     return JSON.parse(content);
   } catch (err) {
-    if (filePath === PONIES_FILE) return defaultPonies;
-    if (filePath === PACKAGES_FILE) return defaultPackages;
     return fallback;
   }
 }
@@ -508,21 +526,44 @@ async function writeJson(filePath, data) {
   }
 }
 
-function parseJsonBody(req) {
-  // If Vercel or another environment has already parsed req.body
-  if (req.body !== undefined && req.body !== null) {
-    if (typeof req.body === 'object') {
-      return Promise.resolve(req.body);
-    }
-    if (typeof req.body === 'string') {
-      try {
-        return Promise.resolve(JSON.parse(req.body));
-      } catch (e) {
-        return Promise.reject(new Error('Invalid JSON format'));
-      }
+async function listGalleryPhotos() {
+  try {
+    const entries = await fs.readdir(IMAGES_DIR, { withFileTypes: true });
+    const photos = entries
+      .filter(entry => entry.isFile())
+      .map(entry => entry.name)
+      .filter(name => {
+        if (/^logo\./i.test(name)) return false;
+        return GALLERY_IMAGE_EXTS.has(path.extname(name).toLowerCase());
+      })
+      .sort((a, b) => {
+        const aHero = /^hero\./i.test(a) ? 0 : 1;
+        const bHero = /^hero\./i.test(b) ? 0 : 1;
+        if (aHero !== bHero) return aHero - bHero;
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+      })
+      .map(name => ({
+        filename: name,
+        url: `/images/${encodeURIComponent(name)}`,
+        label: path.basename(name, path.extname(name)).replace(/[-_]+/g, ' ')
+      }));
+    return photos;
+  } catch (_) {
+    return [];
+  }
+}
+
+function findCustomLogoPath() {
+  for (const name of CUSTOM_LOGO_NAMES) {
+    const candidate = path.join(IMAGES_DIR, name);
+    if (fsSync.existsSync(candidate)) {
+      return candidate;
     }
   }
+  return null;
+}
 
+function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
     req.on('data', chunk => {
@@ -632,18 +673,7 @@ function requireAdminApiAuth(req, res) {
 
 async function handleRequest(req, res) {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  let pathname = parsedUrl.pathname;
-
-  // Handle rewrite from /api/:path* -> /api/index.js or /api/
-  if (pathname === '/api/index.js' || pathname === '/api') {
-    if (req.headers['x-matched-path']) {
-      pathname = req.headers['x-matched-path'];
-    } else if (parsedUrl.searchParams.has('path')) {
-      const p = parsedUrl.searchParams.get('path');
-      pathname = p.startsWith('/') ? `/api${p}` : `/api/${p}`;
-    }
-  }
-
+  const pathname = parsedUrl.pathname;
   const method = req.method.toUpperCase();
 
   // Handle CORS preflight for public API routes
@@ -719,6 +749,12 @@ async function handleRequest(req, res) {
       if (pathname === '/api/packages' && method === 'GET') {
         const pkgData = await readJson(PACKAGES_FILE, { packages: [], addOns: [] });
         return sendJson(res, 200, { success: true, ...pkgData });
+      }
+
+      // GET /api/photos
+      if (pathname === '/api/photos' && method === 'GET') {
+        const photos = await listGalleryPhotos();
+        return sendJson(res, 200, { success: true, photos });
       }
 
       // GET /api/stats (Admin protected)
@@ -901,6 +937,19 @@ async function handleRequest(req, res) {
       return serveStatic(res, path.join(PUBLIC_DIR, 'index.html'));
     }
 
+    if (staticPath === '/photos' || staticPath === '/photos/' || staticPath === '/photos.html') {
+      return serveStatic(res, path.join(PUBLIC_DIR, 'photos.html'));
+    }
+
+    if (staticPath === '/logo') {
+      const logoPath = findCustomLogoPath();
+      if (!logoPath) {
+        res.writeHead(404, securityHeaders({ 'Content-Type': 'text/plain', 'Cache-Control': 'no-cache' }));
+        return res.end('Custom logo not configured');
+      }
+      return serveStatic(res, logoPath);
+    }
+
     if (staticPath === '/admin' || staticPath === '/admin/' || staticPath === '/admin.html') {
       const config = getAdminConfig();
       if (!config.password) {
@@ -940,15 +989,14 @@ if (require.main === module) {
   const adminConfigured = Boolean(getAdminConfig().password);
   server.listen(PORT, HOST, () => {
     console.log(`====================================================`);
-    console.log(`PonyPals Party Rides Server listening on http://${HOST}:${PORT}`);
+    console.log(`PonyPals757 Server listening on http://${HOST}:${PORT}`);
     console.log(`Website: http://${HOST}:${PORT}`);
+    console.log(`Photos: http://${HOST}:${PORT}/photos`);
     console.log(`Admin Dashboard: http://${HOST}:${PORT}/admin (${adminConfigured ? 'auth enabled' : 'LOCKED - set ADMIN_PASSWORD'})`);
     console.log(`====================================================`);
   });
 }
 
-// Export function as primary export for Vercel Serverless Function compatibility,
-// while attaching properties so destructuring like { handleRequest, server } works.
 handleRequest.server = server;
 handleRequest.handleRequest = handleRequest;
 handleRequest.readJson = readJson;
